@@ -1,10 +1,11 @@
-import { z } from "zod";
-import bcrypt from "bcryptjs";
-import { TRPCError } from "@trpc/server";
-import { createTRPCRouter, publicProcedure, protectedProcedure } from "../init";
-import { checkRateLimit, parsePositiveInt } from "../../lib/rate-limit";
-import { getClientIp } from "../../lib/client-ip";
-import { locales } from "@/i18n/routing";
+import { z } from 'zod';
+import bcrypt from 'bcryptjs';
+import { TRPCError } from '@trpc/server';
+import { createTRPCRouter, publicProcedure, protectedProcedure } from '../init';
+import { checkRateLimit, parsePositiveInt } from '../../lib/rate-limit';
+import { getClientIp } from '../../lib/client-ip';
+import { locales } from '@/i18n/routing';
+import { stripUndefined } from '../../lib/strip-undefined';
 
 export const authRouter = createTRPCRouter({
   getSession: publicProcedure.query(({ ctx }) => {
@@ -13,9 +14,9 @@ export const authRouter = createTRPCRouter({
 
   getRegistrationMode: publicProcedure.query(async ({ ctx }) => {
     const setting = await ctx.db.systemSetting.findUnique({
-      where: { key: "registrationMode" },
+      where: { key: 'registrationMode' },
     });
-    return { mode: (setting?.value ?? "open") as "open" | "invite-only" | "closed" };
+    return { mode: (setting?.value ?? 'open') as 'open' | 'invite-only' | 'closed' };
   }),
 
   register: publicProcedure
@@ -25,7 +26,7 @@ export const authRouter = createTRPCRouter({
         email: z.string().email(),
         password: z.string().min(8).max(100),
         inviteCode: z.string().optional(),
-      })
+      }),
     )
     .mutation(async ({ ctx, input }) => {
       // Rate limit: 10 registrations per hour per IP (fall back to global key)
@@ -34,44 +35,39 @@ export const authRouter = createTRPCRouter({
       const { allowed } = checkRateLimit(`register:${ip}`, maxRegAttempts, 60 * 60 * 1000);
       if (!allowed) {
         throw new TRPCError({
-          code: "TOO_MANY_REQUESTS",
-          message: "Too many registration attempts. Please try again later.",
+          code: 'TOO_MANY_REQUESTS',
+          message: 'Too many registration attempts. Please try again later.',
         });
       }
 
       // Check registration mode
       const modeSetting = await ctx.db.systemSetting.findUnique({
-        where: { key: "registrationMode" },
+        where: { key: 'registrationMode' },
       });
-      const mode = modeSetting?.value ?? "open";
+      const mode = modeSetting?.value ?? 'open';
 
-      if (mode === "closed") {
+      if (mode === 'closed') {
         throw new TRPCError({
-          code: "FORBIDDEN",
-          message: "Registration is currently closed.",
+          code: 'FORBIDDEN',
+          message: 'Registration is currently closed.',
         });
       }
 
-      if (mode === "invite-only") {
+      if (mode === 'invite-only') {
         if (!input.inviteCode) {
           throw new TRPCError({
-            code: "FORBIDDEN",
-            message: "An invite code is required to register.",
+            code: 'FORBIDDEN',
+            message: 'An invite code is required to register.',
           });
         }
 
         const invite = await ctx.db.systemInvite.findUnique({
           where: { code: input.inviteCode },
         });
-        if (
-          !invite ||
-          invite.revokedAt ||
-          invite.usedAt ||
-          (invite.expiresAt && invite.expiresAt < new Date())
-        ) {
+        if (!invite || invite.revokedAt || invite.usedAt || (invite.expiresAt && invite.expiresAt < new Date())) {
           throw new TRPCError({
-            code: "FORBIDDEN",
-            message: "Invalid or expired invite code.",
+            code: 'FORBIDDEN',
+            message: 'Invalid or expired invite code.',
           });
         }
       }
@@ -81,8 +77,8 @@ export const authRouter = createTRPCRouter({
       });
       if (existing) {
         throw new TRPCError({
-          code: "CONFLICT",
-          message: "Unable to create account. Please try a different email or sign in.",
+          code: 'CONFLICT',
+          message: 'Unable to create account. Please try a different email or sign in.',
         });
       }
 
@@ -96,7 +92,7 @@ export const authRouter = createTRPCRouter({
           },
         });
 
-        if (input.inviteCode && mode === "invite-only") {
+        if (input.inviteCode && mode === 'invite-only') {
           const claimed = await tx.systemInvite.updateMany({
             where: {
               code: input.inviteCode,
@@ -108,8 +104,8 @@ export const authRouter = createTRPCRouter({
           });
           if (claimed.count === 0) {
             throw new TRPCError({
-              code: "FORBIDDEN",
-              message: "Invalid or expired invite code.",
+              code: 'FORBIDDEN',
+              message: 'Invalid or expired invite code.',
             });
           }
         }
@@ -125,7 +121,7 @@ export const authRouter = createTRPCRouter({
       z.object({
         currentPassword: z.string().min(1),
         newPassword: z.string().min(8).max(100),
-      })
+      }),
     )
     .mutation(async ({ ctx, input }) => {
       const user = await ctx.db.user.findUnique({
@@ -133,16 +129,16 @@ export const authRouter = createTRPCRouter({
       });
       if (!user?.passwordHash) {
         throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: "Account uses OAuth or magic link — no password to change",
+          code: 'BAD_REQUEST',
+          message: 'Account uses OAuth or magic link — no password to change',
         });
       }
 
       const valid = await bcrypt.compare(input.currentPassword, user.passwordHash);
       if (!valid) {
         throw new TRPCError({
-          code: "UNAUTHORIZED",
-          message: "Current password is incorrect",
+          code: 'UNAUTHORIZED',
+          message: 'Current password is incorrect',
         });
       }
 
@@ -161,7 +157,7 @@ export const authRouter = createTRPCRouter({
       select: { name: true, email: true, venmoUsername: true, locale: true, defaultCurrency: true },
     });
     if (!user) {
-      throw new TRPCError({ code: "NOT_FOUND", message: "User not found" });
+      throw new TRPCError({ code: 'NOT_FOUND', message: 'User not found' });
     }
     return user;
   }),
@@ -173,19 +169,23 @@ export const authRouter = createTRPCRouter({
         defaultCurrency: z.string().length(3).optional(),
         locale: z.enum(locales).optional(),
         venmoUsername: z.string().max(50).nullable().optional(),
-      })
+      }),
     )
     .mutation(async ({ ctx, input }) => {
       const data = {
-        ...input,
-        ...(input.venmoUsername !== undefined
-          ? { venmoUsername: input.venmoUsername?.trim() || null }
-          : {}),
+        ...stripUndefined(input),
+        ...(input.venmoUsername !== undefined ? { venmoUsername: input.venmoUsername?.trim() || null } : {}),
       };
       const user = await ctx.db.user.update({
         where: { id: ctx.user.id },
         data,
       });
-      return { id: user.id, name: user.name, email: user.email, locale: user.locale, venmoUsername: user.venmoUsername };
+      return {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        locale: user.locale,
+        venmoUsername: user.venmoUsername,
+      };
     }),
 });

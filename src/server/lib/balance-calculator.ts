@@ -53,18 +53,24 @@ export function simplifyDebts(balances: MemberBalance[]): SimplifiedDebt[] {
   let di = 0;
 
   while (ci < creditors.length && di < debtors.length) {
-    const amount = Math.min(creditors[ci].amount, debtors[di].amount);
+    const creditor = creditors[ci];
+    const debtor = debtors[di];
+    // Unreachable given the loop condition above (ci/di are always in
+    // bounds); guards the indexed access for noUncheckedIndexedAccess.
+    if (!creditor || !debtor) break;
+
+    const amount = Math.min(creditor.amount, debtor.amount);
     if (amount > 0) {
       result.push({
-        from: debtors[di].userId,
-        to: creditors[ci].userId,
+        from: debtor.userId,
+        to: creditor.userId,
         amount,
       });
     }
-    creditors[ci].amount -= amount;
-    debtors[di].amount -= amount;
-    if (creditors[ci].amount === 0) ci++;
-    if (debtors[di].amount === 0) di++;
+    creditor.amount -= amount;
+    debtor.amount -= amount;
+    if (creditor.amount === 0) ci++;
+    if (debtor.amount === 0) di++;
   }
 
   return result;
@@ -74,10 +80,7 @@ export function simplifyDebts(balances: MemberBalance[]): SimplifiedDebt[] {
  * Compute member balances from a set of expenses and settlements.
  * Returns per-member paid, owes, and net amounts.
  */
-export function computeBalances(
-  expenses: Expense[],
-  settlements: Settlement[]
-): MemberBalance[] {
+export function computeBalances(expenses: Expense[], settlements: Settlement[]): MemberBalance[] {
   const balanceMap = new Map<string, MemberBalance>();
 
   const getOrCreate = (userId: string): MemberBalance => {

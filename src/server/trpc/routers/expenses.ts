@@ -1,9 +1,10 @@
-import { z } from "zod";
-import { TRPCError } from "@trpc/server";
-import { createTRPCRouter, groupMemberProcedure } from "../init";
-import { SplitMode } from "@/generated/prisma/client";
-import { getExchangeRate, convertCents } from "../../lib/exchange-rates";
-import { MAX_MONEY_CENTS } from "@/lib/money";
+import { z } from 'zod';
+import { TRPCError } from '@trpc/server';
+import { createTRPCRouter, groupMemberProcedure } from '../init';
+import { SplitMode } from '@/generated/prisma/client';
+import { getExchangeRate, convertCents } from '../../lib/exchange-rates';
+import { MAX_MONEY_CENTS } from '@/lib/money';
+import { stripUndefined } from '../../lib/strip-undefined';
 
 const expenseShareSchema = z.object({
   userId: z.string(),
@@ -15,10 +16,9 @@ const expenseShareSchema = z.object({
 const expenseSharesArraySchema = z
   .array(expenseShareSchema)
   .min(1)
-  .refine(
-    (shares) => new Set(shares.map((s) => s.userId)).size === shares.length,
-    { message: "Duplicate user in shares" }
-  );
+  .refine((shares) => new Set(shares.map((s) => s.userId)).size === shares.length, {
+    message: 'Duplicate user in shares',
+  });
 
 const exchangeRateSchema = z.number().positive().finite().max(1_000_000);
 
@@ -29,14 +29,14 @@ export const expensesRouter = createTRPCRouter({
         groupId: z.string(),
         cursor: z.string().optional(),
         limit: z.number().int().min(1).max(100).default(20),
-      })
+      }),
     )
     .query(async ({ ctx, input }) => {
       const expenses = await ctx.db.expense.findMany({
         where: { groupId: input.groupId },
         take: input.limit + 1,
         ...(input.cursor ? { cursor: { id: input.cursor } } : {}),
-        orderBy: { expenseDate: "desc" },
+        orderBy: { expenseDate: 'desc' },
         include: {
           paidBy: { select: { id: true, name: true, email: true, image: true } },
           shares: {
@@ -69,7 +69,7 @@ export const expensesRouter = createTRPCRouter({
         },
       });
       if (!expense || expense.groupId !== input.groupId) {
-        throw new TRPCError({ code: "NOT_FOUND" });
+        throw new TRPCError({ code: 'NOT_FOUND' });
       }
       return expense;
     }),
@@ -81,7 +81,12 @@ export const expensesRouter = createTRPCRouter({
         title: z.string().min(1).max(200),
         description: z.string().max(1000).optional(),
         amount: z.number().int().positive().max(MAX_MONEY_CENTS),
-        currency: z.string().length(3).regex(/^[a-zA-Z]{3}$/).transform((c) => c.toUpperCase()).default("USD"),
+        currency: z
+          .string()
+          .length(3)
+          .regex(/^[a-zA-Z]{3}$/)
+          .transform((c) => c.toUpperCase())
+          .default('USD'),
         exchangeRate: exchangeRateSchema.optional(), // manual override
         category: z.string().max(50).optional(),
         expenseDate: z.string().datetime().optional(),
@@ -89,7 +94,7 @@ export const expensesRouter = createTRPCRouter({
         splitMode: z.nativeEnum(SplitMode),
         shares: expenseSharesArraySchema,
         receiptId: z.string().optional(),
-      })
+      }),
     )
     .mutation(async ({ ctx, input }) => {
       // Block expenses on archived groups
@@ -99,8 +104,8 @@ export const expensesRouter = createTRPCRouter({
       });
       if (group?.archivedAt) {
         throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: "Cannot add expenses to an archived group",
+          code: 'BAD_REQUEST',
+          message: 'Cannot add expenses to an archived group',
         });
       }
 
@@ -109,7 +114,7 @@ export const expensesRouter = createTRPCRouter({
         where: { groupId: input.groupId, userId: input.paidById },
       });
       if (!paidByMember) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Paid-by user is not a member of this group" });
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Paid-by user is not a member of this group' });
       }
 
       // Validate all share userIds are group members
@@ -119,8 +124,8 @@ export const expensesRouter = createTRPCRouter({
       });
       if (memberCount !== new Set(shareUserIds).size) {
         throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: "One or more share users are not members of this group",
+          code: 'BAD_REQUEST',
+          message: 'One or more share users are not members of this group',
         });
       }
 
@@ -128,7 +133,7 @@ export const expensesRouter = createTRPCRouter({
       const sharesSum = input.shares.reduce((sum, s) => sum + s.amount, 0);
       if (sharesSum !== input.amount) {
         throw new TRPCError({
-          code: "BAD_REQUEST",
+          code: 'BAD_REQUEST',
           message: `Shares sum (${sharesSum}) does not equal expense amount (${input.amount})`,
         });
       }
@@ -137,7 +142,7 @@ export const expensesRouter = createTRPCRouter({
       let exchangeRate: number | null = null;
       let baseCurrencyAmount: number | null = null;
 
-      const groupCurrency = group?.currency ?? "USD";
+      const groupCurrency = group?.currency ?? 'USD';
       if (input.currency.toUpperCase() !== groupCurrency.toUpperCase()) {
         if (input.exchangeRate) {
           // Manual override
@@ -152,8 +157,8 @@ export const expensesRouter = createTRPCRouter({
 
         if (exchangeRate === null) {
           throw new TRPCError({
-            code: "BAD_REQUEST",
-            message: "Could not fetch exchange rate. Please provide a manual rate or try again.",
+            code: 'BAD_REQUEST',
+            message: 'Could not fetch exchange rate. Please provide a manual rate or try again.',
           });
         }
 
@@ -165,23 +170,23 @@ export const expensesRouter = createTRPCRouter({
           data: {
             groupId: input.groupId,
             title: input.title,
-            description: input.description,
+            ...(input.description !== undefined ? { description: input.description } : {}),
             amount: input.amount,
             currency: input.currency,
             exchangeRate: exchangeRate ?? 1.0,
             baseCurrencyAmount,
-            category: input.category,
+            ...(input.category !== undefined ? { category: input.category } : {}),
             expenseDate: input.expenseDate ? new Date(input.expenseDate) : new Date(),
             paidById: input.paidById,
             addedById: ctx.user.id,
             splitMode: input.splitMode,
-            receiptId: input.receiptId,
+            ...(input.receiptId !== undefined ? { receiptId: input.receiptId } : {}),
             shares: {
               create: input.shares.map((s) => ({
                 userId: s.userId,
                 amount: s.amount,
                 shares: s.shares ?? 1,
-                percentage: s.percentage,
+                ...(s.percentage !== undefined ? { percentage: s.percentage } : {}),
               })),
             },
           },
@@ -194,7 +199,7 @@ export const expensesRouter = createTRPCRouter({
           data: {
             groupId: input.groupId,
             userId: ctx.user.id,
-            type: "EXPENSE_CREATED",
+            type: 'EXPENSE_CREATED',
             entityId: created.id,
             metadata: { title: input.title, amount: input.amount },
           },
@@ -208,23 +213,30 @@ export const expensesRouter = createTRPCRouter({
 
   update: groupMemberProcedure
     .input(
-      z.object({
-        groupId: z.string(),
-        expenseId: z.string(),
-        title: z.string().min(1).max(200).optional(),
-        description: z.string().max(1000).optional(),
-        amount: z.number().int().positive().max(MAX_MONEY_CENTS).optional(),
-        currency: z.string().length(3).regex(/^[a-zA-Z]{3}$/).transform((c) => c.toUpperCase()).optional(),
-        exchangeRate: exchangeRateSchema.optional(), // manual override
-        category: z.string().max(50).optional(),
-        expenseDate: z.string().datetime().optional(),
-        paidById: z.string().optional(),
-        splitMode: z.nativeEnum(SplitMode).optional(),
-        shares: expenseSharesArraySchema.optional(),
-      }).refine(
-        (data) => !data.amount || data.shares,
-        { message: "Shares are required when updating the amount", path: ["shares"] }
-      )
+      z
+        .object({
+          groupId: z.string(),
+          expenseId: z.string(),
+          title: z.string().min(1).max(200).optional(),
+          description: z.string().max(1000).optional(),
+          amount: z.number().int().positive().max(MAX_MONEY_CENTS).optional(),
+          currency: z
+            .string()
+            .length(3)
+            .regex(/^[a-zA-Z]{3}$/)
+            .transform((c) => c.toUpperCase())
+            .optional(),
+          exchangeRate: exchangeRateSchema.optional(), // manual override
+          category: z.string().max(50).optional(),
+          expenseDate: z.string().datetime().optional(),
+          paidById: z.string().optional(),
+          splitMode: z.nativeEnum(SplitMode).optional(),
+          shares: expenseSharesArraySchema.optional(),
+        })
+        .refine((data) => !data.amount || data.shares, {
+          message: 'Shares are required when updating the amount',
+          path: ['shares'],
+        }),
     )
     .mutation(async ({ ctx, input }) => {
       // Block updates on archived groups
@@ -234,8 +246,8 @@ export const expensesRouter = createTRPCRouter({
       });
       if (groupCheck?.archivedAt) {
         throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: "Cannot modify expenses in an archived group",
+          code: 'BAD_REQUEST',
+          message: 'Cannot modify expenses in an archived group',
         });
       }
 
@@ -243,17 +255,15 @@ export const expensesRouter = createTRPCRouter({
         where: { id: input.expenseId },
       });
       if (!existing || existing.groupId !== input.groupId) {
-        throw new TRPCError({ code: "NOT_FOUND" });
+        throw new TRPCError({ code: 'NOT_FOUND' });
       }
 
-      const isOwnerOrAdmin =
-        ctx.membership.role === "OWNER" || ctx.membership.role === "ADMIN";
-      const isCreatorOrPayer =
-        existing.paidById === ctx.user.id || existing.addedById === ctx.user.id;
+      const isOwnerOrAdmin = ctx.membership.role === 'OWNER' || ctx.membership.role === 'ADMIN';
+      const isCreatorOrPayer = existing.paidById === ctx.user.id || existing.addedById === ctx.user.id;
       if (!isOwnerOrAdmin && !isCreatorOrPayer) {
         throw new TRPCError({
-          code: "FORBIDDEN",
-          message: "Only the expense creator, payer, or group owner/admin can modify this expense",
+          code: 'FORBIDDEN',
+          message: 'Only the expense creator, payer, or group owner/admin can modify this expense',
         });
       }
 
@@ -263,7 +273,7 @@ export const expensesRouter = createTRPCRouter({
           where: { groupId: input.groupId, userId: input.paidById },
         });
         if (!paidByMember) {
-          throw new TRPCError({ code: "BAD_REQUEST", message: "Paid-by user is not a member of this group" });
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Paid-by user is not a member of this group' });
         }
       }
 
@@ -277,8 +287,8 @@ export const expensesRouter = createTRPCRouter({
         });
         if (memberCount !== new Set(shareUserIds).size) {
           throw new TRPCError({
-            code: "BAD_REQUEST",
-            message: "One or more share users are not members of this group",
+            code: 'BAD_REQUEST',
+            message: 'One or more share users are not members of this group',
           });
         }
 
@@ -286,7 +296,7 @@ export const expensesRouter = createTRPCRouter({
         const sharesSum = shares.reduce((sum, s) => sum + s.amount, 0);
         if (sharesSum !== expectedAmount) {
           throw new TRPCError({
-            code: "BAD_REQUEST",
+            code: 'BAD_REQUEST',
             message: `Shares sum (${sharesSum}) does not equal expense amount (${expectedAmount})`,
           });
         }
@@ -295,7 +305,7 @@ export const expensesRouter = createTRPCRouter({
       // Recompute currency conversion if currency or amount changed
       const effectiveCurrency = inputCurrency ?? existing.currency;
       const effectiveAmount = data.amount ?? existing.amount;
-      const groupCurrency = groupCheck?.currency ?? "USD";
+      const groupCurrency = groupCheck?.currency ?? 'USD';
       let newExchangeRate: number | null = existing.exchangeRate;
       let newBaseCurrencyAmount: number | null = existing.baseCurrencyAmount;
 
@@ -308,15 +318,13 @@ export const expensesRouter = createTRPCRouter({
           const fetched = await getExchangeRate(effectiveCurrency, groupCurrency, dateStr);
           if (fetched === null) {
             throw new TRPCError({
-              code: "BAD_REQUEST",
-              message: "Could not fetch exchange rate. Please provide a manual rate or try again.",
+              code: 'BAD_REQUEST',
+              message: 'Could not fetch exchange rate. Please provide a manual rate or try again.',
             });
           }
           newExchangeRate = fetched;
         }
-        newBaseCurrencyAmount = newExchangeRate
-          ? convertCents(effectiveAmount, newExchangeRate)
-          : null;
+        newBaseCurrencyAmount = newExchangeRate ? convertCents(effectiveAmount, newExchangeRate) : null;
       } else {
         // Same currency as group -- clear conversion fields
         newExchangeRate = 1.0;
@@ -332,7 +340,7 @@ export const expensesRouter = createTRPCRouter({
               userId: s.userId,
               amount: s.amount,
               shares: s.shares ?? 1,
-              percentage: s.percentage,
+              ...(s.percentage !== undefined ? { percentage: s.percentage } : {}),
             })),
           });
         }
@@ -340,7 +348,7 @@ export const expensesRouter = createTRPCRouter({
         const updated = await tx.expense.update({
           where: { id: expenseId },
           data: {
-            ...data,
+            ...stripUndefined(data),
             ...(inputCurrency ? { currency: inputCurrency } : {}),
             exchangeRate: newExchangeRate ?? 1.0,
             baseCurrencyAmount: newBaseCurrencyAmount,
@@ -353,7 +361,7 @@ export const expensesRouter = createTRPCRouter({
           data: {
             groupId,
             userId: ctx.user.id,
-            type: "EXPENSE_UPDATED",
+            type: 'EXPENSE_UPDATED',
             entityId: expenseId,
           },
         });
@@ -373,8 +381,8 @@ export const expensesRouter = createTRPCRouter({
       });
       if (groupCheck?.archivedAt) {
         throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: "Cannot delete expenses from an archived group",
+          code: 'BAD_REQUEST',
+          message: 'Cannot delete expenses from an archived group',
         });
       }
 
@@ -382,17 +390,15 @@ export const expensesRouter = createTRPCRouter({
         where: { id: input.expenseId },
       });
       if (!expense || expense.groupId !== input.groupId) {
-        throw new TRPCError({ code: "NOT_FOUND" });
+        throw new TRPCError({ code: 'NOT_FOUND' });
       }
 
-      const isOwnerOrAdmin =
-        ctx.membership.role === "OWNER" || ctx.membership.role === "ADMIN";
-      const isCreatorOrPayer =
-        expense.paidById === ctx.user.id || expense.addedById === ctx.user.id;
+      const isOwnerOrAdmin = ctx.membership.role === 'OWNER' || ctx.membership.role === 'ADMIN';
+      const isCreatorOrPayer = expense.paidById === ctx.user.id || expense.addedById === ctx.user.id;
       if (!isOwnerOrAdmin && !isCreatorOrPayer) {
         throw new TRPCError({
-          code: "FORBIDDEN",
-          message: "Only the expense creator, payer, or group owner/admin can delete this expense",
+          code: 'FORBIDDEN',
+          message: 'Only the expense creator, payer, or group owner/admin can delete this expense',
         });
       }
 
@@ -403,7 +409,7 @@ export const expensesRouter = createTRPCRouter({
           data: {
             groupId: input.groupId,
             userId: ctx.user.id,
-            type: "EXPENSE_DELETED",
+            type: 'EXPENSE_DELETED',
             entityId: input.expenseId,
             metadata: { title: expense.title, amount: expense.amount },
           },

@@ -1,18 +1,18 @@
-"use client";
+'use client';
 
-import { useState, useRef, useEffect, useMemo } from "react";
-import { useLocale, useTranslations } from "next-intl";
-import { trpc } from "@/lib/trpc";
-import { formatCents, centsToDecimal, parseToCents } from "@/lib/money";
-import { calculateSplitTotals } from "@/lib/split-calculator";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Check, Users, Pencil, Trash2, Plus, Image as ImageIcon, Scissors, Bookmark } from "lucide-react";
-import { toast } from "sonner";
+import { useState, useRef, useEffect, useMemo } from 'react';
+import { useLocale, useTranslations } from 'next-intl';
+import { trpc } from '@/lib/trpc';
+import { formatCents, centsToDecimal, parseToCents } from '@/lib/money';
+import { calculateSplitTotals } from '@/lib/split-calculator';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Separator } from '@/components/ui/separator';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Check, Users, Pencil, Trash2, Plus, Image as ImageIcon, Scissors, Bookmark } from 'lucide-react';
+import { toast } from 'sonner';
 
 type Member = { id: string; name: string | null };
 
@@ -32,14 +32,14 @@ export function ItemAssignment({
   onSaveForLater?: () => void;
 }) {
   const locale = useLocale();
-  const t = useTranslations("expenses.receipt");
+  const t = useTranslations('expenses.receipt');
   const receiptData = trpc.receipts.getReceiptItems.useQuery({ receiptId });
   const utils = trpc.useUtils();
 
   const [assignments, setAssignments] = useState<Assignments>({});
-  const [title, setTitle] = useState("");
-  const [paidById, setPaidById] = useState("");
-  const [tipOverride, setTipOverride] = useState<string>("");
+  const [title, setTitle] = useState('');
+  const [paidById, setPaidById] = useState('');
+  const [tipOverride, setTipOverride] = useState<string>('');
   const [showImage, setShowImage] = useState(false);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -48,11 +48,15 @@ export function ItemAssignment({
   const lastTouchDist = useRef<number | null>(null);
   const imageContainerRef = useRef<HTMLDivElement>(null);
   const [editingItem, setEditingItem] = useState<string | null>(null);
-  const [editValues, setEditValues] = useState<{ name: string; quantity: string; totalPrice: string }>({ name: "", quantity: "", totalPrice: "" });
+  const [editValues, setEditValues] = useState<{ name: string; quantity: string; totalPrice: string }>({
+    name: '',
+    quantity: '',
+    totalPrice: '',
+  });
   const [addingItem, setAddingItem] = useState(false);
-  const [newItem, setNewItem] = useState({ name: "", quantity: "1", totalPrice: "" });
+  const [newItem, setNewItem] = useState({ name: '', quantity: '1', totalPrice: '' });
   const [splittingItem, setSplittingItem] = useState<string | null>(null);
-  const [splitQuantity, setSplitQuantity] = useState("");
+  const [splitQuantity, setSplitQuantity] = useState('');
 
   const createExpense = trpc.receipts.assignItemsAndCreateExpense.useMutation({
     onSuccess: onComplete,
@@ -71,7 +75,7 @@ export function ItemAssignment({
   const addItem = trpc.receipts.addItem.useMutation({
     onSuccess: () => {
       setAddingItem(false);
-      setNewItem({ name: "", quantity: "1", totalPrice: "" });
+      setNewItem({ name: '', quantity: '1', totalPrice: '' });
       utils.receipts.getReceiptItems.invalidate({ receiptId });
     },
     onError: (e) => toast.error(e.message),
@@ -103,8 +107,8 @@ export function ItemAssignment({
       const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
       setZoom((z) => Math.min(Math.max(z * factor, 1), 5));
     };
-    el.addEventListener("wheel", handler, { passive: false });
-    return () => el.removeEventListener("wheel", handler);
+    el.addEventListener('wheel', handler, { passive: false });
+    return () => el.removeEventListener('wheel', handler);
   }, [showImage]);
 
   // Restore saved state (paidById, assignments) when receipt data loads.
@@ -124,7 +128,7 @@ export function ItemAssignment({
 
     const hasSavedPaidBy = !!data.receipt.paidById;
     const hasSavedAssignments = data.items.some(
-      (item: { assignments?: unknown[] }) => item.assignments && item.assignments.length > 0
+      (item: { assignments?: unknown[] }) => item.assignments && item.assignments.length > 0,
     );
 
     if (hasSavedPaidBy || hasSavedAssignments) {
@@ -142,13 +146,14 @@ export function ItemAssignment({
       }
       hasRestoredRef.current = true;
     }
-  }, [receiptData.data]);
+  }, [receiptData.data, title]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   const { receipt, items } = receiptData.data ?? { receipt: null, items: [] };
   const extracted = receipt?.extractedData ?? null;
   const parsedTip = parseFloat(tipOverride);
-  const tip = extracted && tipOverride !== "" && isFinite(parsedTip) ? Math.round(parsedTip * 100) : (extracted?.tip ?? 0);
+  const tip =
+    extracted && tipOverride !== '' && isFinite(parsedTip) ? Math.round(parsedTip * 100) : (extracted?.tip ?? 0);
 
   // Note (Finding #29): toggleAssignment and assignAllToEveryone are intentionally
   // duplicated from split/page.tsx. This component uses Record<string, Set<string>>
@@ -187,11 +192,20 @@ export function ItemAssignment({
 
   function saveEdit(itemId: string) {
     const trimmedName = editValues.name.trim();
-    if (!trimmedName) { toast.error(t("validationNameRequired")); return; }
+    if (!trimmedName) {
+      toast.error(t('validationNameRequired'));
+      return;
+    }
     const totalPrice = parseToCents(editValues.totalPrice);
-    if (totalPrice <= 0) { toast.error(t("validationPricePositive")); return; }
+    if (totalPrice <= 0) {
+      toast.error(t('validationPricePositive'));
+      return;
+    }
     const quantity = parseInt(editValues.quantity);
-    if (!Number.isInteger(quantity) || quantity < 1) { toast.error(t("validationQtyPositive")); return; }
+    if (!Number.isInteger(quantity) || quantity < 1) {
+      toast.error(t('validationQtyPositive'));
+      return;
+    }
     updateItem.mutate({
       itemId,
       name: trimmedName,
@@ -260,21 +274,26 @@ export function ItemAssignment({
         members.map((m) => [
           m.id,
           m.name
-            ? m.name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)
-            : "?",
-        ])
+            ? m.name
+                .split(' ')
+                .map((n) => n[0])
+                .join('')
+                .toUpperCase()
+                .slice(0, 2)
+            : '?',
+        ]),
       ),
-    [members]
+    [members],
   );
 
   if (receiptData.isLoading) {
-    return <p className="text-muted-foreground">{t("loadingItems")}</p>;
+    return <p className="text-muted-foreground">{t('loadingItems')}</p>;
   }
   if (!receiptData.data) {
-    return <p className="text-destructive">{t("noReceiptData")}</p>;
+    return <p className="text-destructive">{t('noReceiptData')}</p>;
   }
   if (!extracted) {
-    return <p className="text-destructive">{t("noExtractedData")}</p>;
+    return <p className="text-destructive">{t('noExtractedData')}</p>;
   }
 
   // After early returns, these are guaranteed non-null
@@ -290,7 +309,8 @@ export function ItemAssignment({
       receiptId,
       title,
       paidById,
-      tipOverride: tipOverride !== "" && isFinite(parseFloat(tipOverride)) ? Math.round(parseFloat(tipOverride) * 100) : undefined,
+      tipOverride:
+        tipOverride !== '' && isFinite(parseFloat(tipOverride)) ? Math.round(parseFloat(tipOverride) * 100) : undefined,
       assignments: Object.entries(assignments)
         .filter(([, userIds]) => userIds.size > 0)
         .map(([receiptItemId, userIds]) => ({
@@ -318,14 +338,9 @@ export function ItemAssignment({
     <form onSubmit={handleSubmit} className="space-y-4" data-testid="item-assignment-form">
       {/* Receipt image toggle */}
       {safeReceipt.imagePath && (
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={toggleImage}
-        >
+        <Button type="button" variant="outline" size="sm" onClick={toggleImage}>
           <ImageIcon className="mr-2 h-4 w-4" />
-          {showImage ? t("hideImage") : t("viewImage")}
+          {showImage ? t('hideImage') : t('viewImage')}
         </Button>
       )}
 
@@ -337,9 +352,9 @@ export function ItemAssignment({
               className="relative overflow-hidden rounded-t-lg bg-muted/30"
               style={{
                 height: 400,
-                cursor: isDragging ? "grabbing" : "grab",
-                touchAction: "none",
-                userSelect: "none",
+                cursor: isDragging ? 'grabbing' : 'grab',
+                touchAction: 'none',
+                userSelect: 'none',
               }}
               onMouseDown={(e) => {
                 setIsDragging(true);
@@ -352,44 +367,71 @@ export function ItemAssignment({
                   y: dragStart.current.panY + e.clientY - dragStart.current.y,
                 });
               }}
-              onMouseUp={() => { setIsDragging(false); dragStart.current = null; }}
-              onMouseLeave={() => { setIsDragging(false); dragStart.current = null; }}
-              onDoubleClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }}
+              onMouseUp={() => {
+                setIsDragging(false);
+                dragStart.current = null;
+              }}
+              onMouseLeave={() => {
+                setIsDragging(false);
+                dragStart.current = null;
+              }}
+              onDoubleClick={() => {
+                setZoom(1);
+                setPan({ x: 0, y: 0 });
+              }}
               onTouchStart={(e) => {
                 if (e.touches.length === 2) {
-                  const dx = e.touches[0].clientX - e.touches[1].clientX;
-                  const dy = e.touches[0].clientY - e.touches[1].clientY;
+                  const touch0 = e.touches[0];
+                  const touch1 = e.touches[1];
+                  if (!touch0 || !touch1) return;
+                  const dx = touch0.clientX - touch1.clientX;
+                  const dy = touch0.clientY - touch1.clientY;
                   lastTouchDist.current = Math.sqrt(dx * dx + dy * dy);
                 } else {
-                  dragStart.current = { x: e.touches[0].clientX, y: e.touches[0].clientY, panX: pan.x, panY: pan.y };
+                  const touch0 = e.touches[0];
+                  if (!touch0) return;
+                  dragStart.current = { x: touch0.clientX, y: touch0.clientY, panX: pan.x, panY: pan.y };
                 }
               }}
               onTouchMove={(e) => {
                 if (e.touches.length === 2 && lastTouchDist.current !== null) {
-                  const dx = e.touches[0].clientX - e.touches[1].clientX;
-                  const dy = e.touches[0].clientY - e.touches[1].clientY;
+                  const touch0 = e.touches[0];
+                  const touch1 = e.touches[1];
+                  if (!touch0 || !touch1) return;
+                  const dx = touch0.clientX - touch1.clientX;
+                  const dy = touch0.clientY - touch1.clientY;
                   const dist = Math.sqrt(dx * dx + dy * dy);
                   const factor = dist / lastTouchDist.current;
                   setZoom((z) => Math.min(Math.max(z * factor, 1), 5));
                   lastTouchDist.current = dist;
                 } else if (e.touches.length === 1 && dragStart.current) {
+                  const touch0 = e.touches[0];
+                  if (!touch0) return;
                   setPan({
-                    x: dragStart.current.panX + e.touches[0].clientX - dragStart.current.x,
-                    y: dragStart.current.panY + e.touches[0].clientY - dragStart.current.y,
+                    x: dragStart.current.panX + touch0.clientX - dragStart.current.x,
+                    y: dragStart.current.panY + touch0.clientY - dragStart.current.y,
                   });
                 }
               }}
-              onTouchEnd={() => { lastTouchDist.current = null; dragStart.current = null; }}
+              onTouchEnd={() => {
+                lastTouchDist.current = null;
+                dragStart.current = null;
+              }}
             >
+              {/* eslint-disable-next-line @next/next/no-img-element -- user-uploaded
+                  receipt photo with unknown natural dimensions, rendered inside a
+                  pinch-zoom/pan viewport; next/image would need either server-side
+                  dimension probing or a fill+aspect-ratio layout change, out of scope
+                  here */}
               <img
                 src={`/api/uploads/${safeReceipt.imagePath}`}
-                alt={t("receiptImageAlt")}
+                alt={t('receiptImageAlt')}
                 draggable={false}
                 className="h-full w-full object-contain pointer-events-none"
                 style={{
                   transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
-                  transformOrigin: "center center",
-                  transition: isDragging ? "none" : "transform 0.05s ease-out",
+                  transformOrigin: 'center center',
+                  transition: isDragging ? 'none' : 'transform 0.05s ease-out',
                 }}
               />
             </div>
@@ -401,9 +443,12 @@ export function ItemAssignment({
                   variant="ghost"
                   size="sm"
                   className="h-6 px-2 text-xs"
-                  onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }}
+                  onClick={() => {
+                    setZoom(1);
+                    setPan({ x: 0, y: 0 });
+                  }}
                 >
-                  {t("resetView")}
+                  {t('resetView')}
                 </Button>
               </div>
             )}
@@ -414,30 +459,30 @@ export function ItemAssignment({
       {/* Receipt summary */}
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">{t("receiptSummary")}</CardTitle>
+          <CardTitle className="text-base">{t('receiptSummary')}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-1 text-sm">
           {safeExtracted.merchantName && (
             <div className="flex justify-between">
-              <span className="text-muted-foreground">{t("merchant")}</span>
+              <span className="text-muted-foreground">{t('merchant')}</span>
               <span>{safeExtracted.merchantName}</span>
             </div>
           )}
           <div className="flex justify-between">
-            <span className="text-muted-foreground">{t("subtotal")}</span>
+            <span className="text-muted-foreground">{t('subtotal')}</span>
             <span>{formatCents(safeExtracted.subtotal, safeExtracted.currency, locale)}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-muted-foreground">{t("tax")}</span>
+            <span className="text-muted-foreground">{t('tax')}</span>
             <span>{formatCents(safeExtracted.tax, safeExtracted.currency, locale)}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-muted-foreground">{t("tip")}</span>
+            <span className="text-muted-foreground">{t('tip')}</span>
             <span>{formatCents(tip, safeExtracted.currency, locale)}</span>
           </div>
           <Separator />
           <div className="flex justify-between font-semibold">
-            <span>{t("total")}</span>
+            <span>{t('total')}</span>
             <span>{formatCents(safeExtracted.subtotal + safeExtracted.tax + tip, safeExtracted.currency, locale)}</span>
           </div>
         </CardContent>
@@ -447,17 +492,17 @@ export function ItemAssignment({
       <Card>
         <CardContent className="space-y-3 pt-4">
           <div className="space-y-2">
-            <Label htmlFor="title">{t("expenseTitle")}</Label>
+            <Label htmlFor="title">{t('expenseTitle')}</Label>
             <Input
               id="title"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder={t("expenseTitlePlaceholder")}
+              placeholder={t('expenseTitlePlaceholder')}
               required
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="paidBy">{t("paidBy")}</Label>
+            <Label htmlFor="paidBy">{t('paidBy')}</Label>
             <select
               id="paidBy"
               value={paidById}
@@ -466,22 +511,22 @@ export function ItemAssignment({
               className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm"
               data-testid="paid-by-select"
             >
-              <option value="">{t("selectMember")}</option>
+              <option value="">{t('selectMember')}</option>
               {members.map((m) => (
                 <option key={m.id} value={m.id}>
-                  {m.name ?? t("unnamed")}
+                  {m.name ?? t('unnamed')}
                 </option>
               ))}
             </select>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="tip">{t("tipOverride")}</Label>
+            <Label htmlFor="tip">{t('tipOverride')}</Label>
             <Input
               id="tip"
               type="number"
               step="0.01"
               min="0"
-              placeholder={t("tipDetected", { amount: formatCents(safeExtracted.tip, safeExtracted.currency, locale) })}
+              placeholder={t('tipDetected', { amount: formatCents(safeExtracted.tip, safeExtracted.currency, locale) })}
               value={tipOverride}
               onChange={(e) => setTipOverride(e.target.value)}
             />
@@ -493,7 +538,7 @@ export function ItemAssignment({
       <div className="flex gap-2">
         <Button type="button" variant="outline" size="sm" onClick={assignAllToEveryone} data-testid="split-all-btn">
           <Users className="mr-2 h-4 w-4" />
-          {t("splitAllEqually")}
+          {t('splitAllEqually')}
         </Button>
         <Button
           type="button"
@@ -503,7 +548,7 @@ export function ItemAssignment({
           data-testid="add-item-btn"
         >
           <Plus className="mr-2 h-4 w-4" />
-          {t("addItem")}
+          {t('addItem')}
         </Button>
       </div>
 
@@ -511,17 +556,25 @@ export function ItemAssignment({
       {addingItem && (
         <Card className="border-primary/50" data-testid="add-item-form">
           <CardContent className="py-3">
-            <div className="space-y-2" onKeyDown={(e) => { if (e.key === "Enter" && (e.target as HTMLElement).tagName === "INPUT" && !addItem.isPending) { e.preventDefault(); handleAddItem(); } }}>
+            <div
+              className="space-y-2"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && (e.target as HTMLElement).tagName === 'INPUT' && !addItem.isPending) {
+                  e.preventDefault();
+                  handleAddItem();
+                }
+              }}
+            >
               <div className="flex gap-2">
                 <Input
-                  placeholder={t("itemNamePlaceholder")}
+                  placeholder={t('itemNamePlaceholder')}
                   value={newItem.name}
                   onChange={(e) => setNewItem((p) => ({ ...p, name: e.target.value }))}
                   className="flex-1"
                 />
                 <Input
                   type="number"
-                  placeholder={t("qtyPlaceholder")}
+                  placeholder={t('qtyPlaceholder')}
                   value={newItem.quantity}
                   onChange={(e) => setNewItem((p) => ({ ...p, quantity: e.target.value }))}
                   className="w-16"
@@ -530,7 +583,7 @@ export function ItemAssignment({
                 <Input
                   type="number"
                   step="0.01"
-                  placeholder={t("pricePlaceholder")}
+                  placeholder={t('pricePlaceholder')}
                   value={newItem.totalPrice}
                   onChange={(e) => setNewItem((p) => ({ ...p, totalPrice: e.target.value }))}
                   className="w-24"
@@ -538,10 +591,10 @@ export function ItemAssignment({
               </div>
               <div className="flex gap-2">
                 <Button type="button" size="sm" disabled={addItem.isPending} onClick={handleAddItem}>
-                  {addItem.isPending ? t("adding") : t("add")}
+                  {addItem.isPending ? t('adding') : t('add')}
                 </Button>
                 <Button type="button" variant="ghost" size="sm" onClick={() => setAddingItem(false)}>
-                  {t("cancel")}
+                  {t('cancel')}
                 </Button>
               </div>
             </div>
@@ -551,13 +604,17 @@ export function ItemAssignment({
 
       {/* Item assignment */}
       <div className="space-y-2">
-        <Label>{t("assignItems", { assigned: assignedItemCount, total: items.length })}</Label>
+        <Label>{t('assignItems', { assigned: assignedItemCount, total: items.length })}</Label>
         {items.map((item) => {
           const assigned = assignments[item.id] ?? new Set();
           const isEditing = editingItem === item.id;
 
           return (
-            <Card key={item.id} className={assigned.size === 0 ? "border-amber-300" : ""} data-testid={`item-card-${item.id}`}>
+            <Card
+              key={item.id}
+              className={assigned.size === 0 ? 'border-amber-300' : ''}
+              data-testid={`item-card-${item.id}`}
+            >
               <CardContent className="py-3">
                 {isEditing ? (
                   <div className="mb-2 space-y-2">
@@ -566,14 +623,14 @@ export function ItemAssignment({
                         value={editValues.name}
                         onChange={(e) => setEditValues((p) => ({ ...p, name: e.target.value }))}
                         className="flex-1"
-                        placeholder={t("itemNamePlaceholder")}
+                        placeholder={t('itemNamePlaceholder')}
                       />
                       <Input
                         type="number"
                         value={editValues.quantity}
                         onChange={(e) => setEditValues((p) => ({ ...p, quantity: e.target.value }))}
                         className="w-16"
-                        placeholder={t("qtyPlaceholder")}
+                        placeholder={t('qtyPlaceholder')}
                         min="1"
                       />
                       <Input
@@ -582,15 +639,15 @@ export function ItemAssignment({
                         value={editValues.totalPrice}
                         onChange={(e) => setEditValues((p) => ({ ...p, totalPrice: e.target.value }))}
                         className="w-24"
-                        placeholder={t("pricePlaceholder")}
+                        placeholder={t('pricePlaceholder')}
                       />
                     </div>
                     <div className="flex gap-1">
                       <Button type="button" size="sm" onClick={() => saveEdit(item.id)} disabled={updateItem.isPending}>
-                        {t("save")}
+                        {t('save')}
                       </Button>
                       <Button type="button" variant="ghost" size="sm" onClick={() => setEditingItem(null)}>
-                        {t("cancel")}
+                        {t('cancel')}
                       </Button>
                     </div>
                   </div>
@@ -598,11 +655,7 @@ export function ItemAssignment({
                   <div className="mb-2 flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <span className="font-medium">{item.name}</span>
-                      {item.quantity > 1 && (
-                        <span className="text-xs text-muted-foreground">
-                          x{item.quantity}
-                        </span>
-                      )}
+                      {item.quantity > 1 && <span className="text-xs text-muted-foreground">x{item.quantity}</span>}
                       <button
                         type="button"
                         onClick={() => startEditing(item)}
@@ -613,7 +666,7 @@ export function ItemAssignment({
                       <button
                         type="button"
                         onClick={() => {
-                          if (confirm(t("removeConfirm", { name: item.name }))) {
+                          if (confirm(t('removeConfirm', { name: item.name }))) {
                             deleteItem.mutate({ itemId: item.id });
                           }
                         }}
@@ -626,11 +679,11 @@ export function ItemAssignment({
                           type="button"
                           onClick={() => {
                             setSplittingItem(item.id);
-                            setSplitQuantity("1");
+                            setSplitQuantity('1');
                           }}
                           className="text-muted-foreground hover:text-foreground"
-                          title={t("split")}
-                          aria-label={t("splitAriaLabel", { name: item.name })}
+                          title={t('split')}
+                          aria-label={t('splitAriaLabel', { name: item.name })}
                           data-testid={`split-btn-${item.id}`}
                         >
                           <Scissors className="h-3 w-3" />
@@ -642,42 +695,52 @@ export function ItemAssignment({
                     </span>
                   </div>
                 )}
-                {!isEditing && splittingItem === item.id && (() => {
-                  const parsed = Number(splitQuantity);
-                  const validQty = Number.isSafeInteger(parsed) && parsed >= 1 && parsed < item.quantity;
-                  return (
-                    <div className="mb-2 flex items-center gap-2" data-testid="split-form">
-                      <span className="text-xs text-muted-foreground">{t("splitOff")}</span>
-                      <Input
-                        type="number"
-                        min={1}
-                        max={item.quantity - 1}
-                        value={splitQuantity}
-                        onChange={(e) => setSplitQuantity(e.target.value)}
-                        className="w-16 h-7 text-xs"
-                        data-testid="split-qty-input"
-                      />
-                      <span className="text-xs text-muted-foreground">{t("splitOfTotal", { total: item.quantity })}</span>
-                      <Button
-                        type="button"
-                        size="sm"
-                        className="h-7 text-xs"
-                        disabled={splitItem.isPending || !validQty}
-                        data-testid="split-submit"
-                        onClick={() => {
-                          if (!validQty) return;
-                          splitItem.mutate({ itemId: item.id, splitQuantity: parsed });
-                          setSplittingItem(null);
-                        }}
-                      >
-                        {t("split")}
-                      </Button>
-                      <Button type="button" variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setSplittingItem(null)}>
-                        {t("cancel")}
-                      </Button>
-                    </div>
-                  );
-                })()}
+                {!isEditing &&
+                  splittingItem === item.id &&
+                  (() => {
+                    const parsed = Number(splitQuantity);
+                    const validQty = Number.isSafeInteger(parsed) && parsed >= 1 && parsed < item.quantity;
+                    return (
+                      <div className="mb-2 flex items-center gap-2" data-testid="split-form">
+                        <span className="text-xs text-muted-foreground">{t('splitOff')}</span>
+                        <Input
+                          type="number"
+                          min={1}
+                          max={item.quantity - 1}
+                          value={splitQuantity}
+                          onChange={(e) => setSplitQuantity(e.target.value)}
+                          className="w-16 h-7 text-xs"
+                          data-testid="split-qty-input"
+                        />
+                        <span className="text-xs text-muted-foreground">
+                          {t('splitOfTotal', { total: item.quantity })}
+                        </span>
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="h-7 text-xs"
+                          disabled={splitItem.isPending || !validQty}
+                          data-testid="split-submit"
+                          onClick={() => {
+                            if (!validQty) return;
+                            splitItem.mutate({ itemId: item.id, splitQuantity: parsed });
+                            setSplittingItem(null);
+                          }}
+                        >
+                          {t('split')}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 text-xs"
+                          onClick={() => setSplittingItem(null)}
+                        >
+                          {t('cancel')}
+                        </Button>
+                      </div>
+                    );
+                  })()}
                 <div className="flex flex-wrap gap-1.5">
                   {members.map((m) => {
                     const isAssigned = assigned.has(m.id);
@@ -689,16 +752,14 @@ export function ItemAssignment({
                         data-testid={`member-toggle-${m.id}`}
                         className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-xs transition-colors ${
                           isAssigned
-                            ? "bg-primary text-primary-foreground"
-                            : "bg-muted text-muted-foreground hover:bg-muted/80"
+                            ? 'bg-primary text-primary-foreground'
+                            : 'bg-muted text-muted-foreground hover:bg-muted/80'
                         }`}
                       >
                         <Avatar className="h-4 w-4">
-                          <AvatarFallback className="text-[8px]">
-                            {memberInitials.get(m.id) ?? "?"}
-                          </AvatarFallback>
+                          <AvatarFallback className="text-[8px]">{memberInitials.get(m.id) ?? '?'}</AvatarFallback>
                         </Avatar>
-                        {m.name?.split(" ")[0] ?? "?"}
+                        {m.name?.split(' ')[0] ?? '?'}
                         {isAssigned && <Check className="h-3 w-3" />}
                       </button>
                     );
@@ -714,7 +775,7 @@ export function ItemAssignment({
       {perPersonTotals.size > 0 && (
         <Card data-testid="per-person-totals">
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">{t("perPersonTotals")}</CardTitle>
+            <CardTitle className="text-base">{t('perPersonTotals')}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-1">
             {members.map((m) => {
@@ -722,10 +783,8 @@ export function ItemAssignment({
               if (!total) return null;
               return (
                 <div key={m.id} className="flex justify-between text-sm">
-                  <span>{m.name ?? t("unnamed")}</span>
-                  <span className="font-medium">
-                    {formatCents(total, safeExtracted.currency, locale)}
-                  </span>
+                  <span>{m.name ?? t('unnamed')}</span>
+                  <span className="font-medium">{formatCents(total, safeExtracted.currency, locale)}</span>
                 </div>
               );
             })}
@@ -734,9 +793,7 @@ export function ItemAssignment({
       )}
 
       {createExpense.error && (
-        <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-          {createExpense.error.message}
-        </div>
+        <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{createExpense.error.message}</div>
       )}
 
       <Button
@@ -746,10 +803,10 @@ export function ItemAssignment({
         data-testid="create-expense-btn"
       >
         {createExpense.isPending
-          ? t("creatingExpense")
+          ? t('creatingExpense')
           : !allAssigned
-            ? t("assignAllItems", { remaining: items.length - assignedItemCount })
-            : t("createExpense")}
+            ? t('assignAllItems', { remaining: items.length - assignedItemCount })
+            : t('createExpense')}
       </Button>
 
       {onSaveForLater && (
@@ -762,7 +819,7 @@ export function ItemAssignment({
           data-testid="save-for-later-btn"
         >
           <Bookmark className="mr-2 h-4 w-4" />
-          {saveForLater.isPending ? t("saving") : t("saveForLater")}
+          {saveForLater.isPending ? t('saving') : t('saveForLater')}
         </Button>
       )}
     </form>
