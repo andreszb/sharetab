@@ -392,6 +392,55 @@ npm run dev
 
 Demo accounts after seeding: `alice@example.com`, `bob@example.com`, `charlie@example.com` (password: `password123`).
 
+### Nix / NixOS
+
+A `flake.nix` provides a pinned toolchain (Node 22, PostgreSQL 16, Prisma schema engine, Playwright browsers) matching what CI uses. Nix is entirely optional -- it changes nothing for contributors who do not use it.
+
+```bash
+# Enter the dev shell
+nix develop
+
+# Install dependencies (the flake pins the toolchain, not node_modules)
+npm install
+
+# Copy and configure environment
+cp .env.example .env  # Then edit .env as needed
+
+# All-in-one: PostgreSQL + schema push + seed + dev server
+nix run .#dev
+
+# Or, from inside `nix develop`, the same thing:
+sharetab-dev
+```
+
+Other outputs:
+
+```bash
+nix run .#build      # npm run build
+nix run .#test       # npm test (unit tests)
+nix fmt              # format .nix files (nixpkgs-fmt)
+nix flake check      # evaluate all outputs
+```
+
+For e2e, wire up the browsers once, then run the suite against a server started by
+`nix run .#dev` in another terminal. Quote the whole command for `bash -c` -- passing
+Playwright's flags directly to `nix develop -c` lets `nix` consume `--project` and
+`--grep` before Playwright sees them:
+
+```bash
+nix develop -c link-playwright-browsers
+nix develop -c bash -c 'BASE_URL=http://localhost:3000 npx playwright test'
+```
+
+With [direnv](https://direnv.net/), `direnv allow` activates the shell automatically on `cd`.
+
+#### Caveats
+
+- **`npm run dev:full` does not work on NixOS.** It drives the `embedded-postgres` npm package, whose prebuilt PostgreSQL binaries are dynamically linked against an FHS layout and will not execute. Use `nix run .#dev` instead -- it starts `postgresql_16` from nixpkgs against the same `./test-pg-data` directory, on the same port (51214), so `DATABASE_URL` from `.env.example` keeps working.
+- **`npx prisma db push` needs the flake's schema engine.** The `@prisma/engines` npm package downloads a prebuilt binary that cannot run on NixOS -- without an override Prisma tries to fetch a `linux-nixos` engine and fails with a 404. Every flake output therefore exports `PRISMA_SCHEMA_ENGINE_BINARY` from nixpkgs' `prisma-engines_7`. nixpkgs and `package.json` version this independently (7.9.1 vs 7.6.0 at time of writing); that combination is tested and works, but a wider gap could eventually be rejected. The app runtime is unaffected either way: `prisma/schema.prisma` uses the Rust-free `prisma-client` generator with `@prisma/adapter-pg`, so no query engine binary is involved.
+- **Playwright browsers need one extra step.** nixpkgs and npm roll Playwright on different schedules, so the browser revisions rarely match. Run `link-playwright-browsers` once after `npm install` -- it builds a symlink farm in `.playwright-browsers/` mapping the revisions this checkout expects onto the ones nixpkgs built. If a future version gap is too wide to alias, fall back to [`programs.nix-ld`](https://github.com/nix-community/nix-ld) plus `npx playwright install`.
+- **Prisma may warn about OpenSSL.** `prisma:warn Prisma failed to detect the libssl/openssl version` is cosmetic -- it comes from Prisma probing for engine binaries this setup does not use.
+
 ### Running Tests
 
 ```bash
