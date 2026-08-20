@@ -80,3 +80,9 @@ test-pg-data/
 
 # Claude Code session artifacts (agent worktrees, local settings)
 .claude/
+
+# Nix
+result
+result-*
+.direnv/
+.playwright-browsers/
