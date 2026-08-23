@@ -188,6 +188,10 @@
       };
     in
     {
+      packages = forAllSystems (pkgs: {
+        default = pkgs.callPackage ./package.nix { };
+      });
+
       devShells = forAllSystems (pkgs: {
         default = pkgs.mkShell {
           packages = toolchain pkgs ++ [
@@ -231,5 +235,7 @@
         });
 
       formatter = forAllSystems (pkgs: pkgs.nixpkgs-fmt);
+
+      nixosModules.default = import ./module.nix;
     };
 }
