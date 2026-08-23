@@ -76,10 +76,13 @@ let
       fi
 
       # db push, never migrate deploy — there is no _prisma_migrations table.
-      # --skip-generate because the client was generated at build time and the
-      # store path is read-only.
+      #
+      # No --skip-generate: Prisma 7 removed the flag (db push no longer runs
+      # generators), and passing it makes the CLI print usage and exit 1. The
+      # client was generated at build time anyway, and the store path it was
+      # written to is read-only.
       cd "${app}"
-      prisma db push --skip-generate
+      prisma db push
     '';
   };
 in
