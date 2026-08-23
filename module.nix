@@ -19,12 +19,20 @@ let
 
   app = "${cfg.package}/share/sharetab";
 
-  # Peer auth over the socket: PostgreSQL matches the OS user name against the
-  # database role, which is why the unit runs as a static user rather than
-  # under DynamicUser. `user=` is not optional — without it libpq connects as
-  # whatever the process's uid maps to only when it can resolve it, and the
-  # failure mode is an "anonymous" role that does not exist.
-  databaseUrl = "postgresql:///${cfg.database.name}?host=/run/postgresql&user=${cfg.user}";
+  # Unix socket connection. The user goes in the authority rather than in a
+  # `user=` parameter: libpq honours the parameter form
+  # (postgresql:///db?host=/run/postgresql&user=x), and psql connects with it
+  # fine, but Prisma's Rust schema engine ignores it and fails the whole
+  # pre-start with "P1010: User was denied access on the database". The
+  # authority form is what Prisma documents for sockets, and node-postgres —
+  # which the app itself uses via @prisma/adapter-pg — accepts it too.
+  #
+  # `localhost` in the authority is not where it connects; `?host=` selects
+  # the socket directory. It is a placeholder the URL grammar requires.
+  #
+  # Peer auth is why the unit runs as a static user rather than under
+  # DynamicUser: PostgreSQL matches the OS user name against the role.
+  databaseUrl = "postgresql://${cfg.user}@localhost/${cfg.database.name}?host=/run/postgresql";
 
   # Replaces docker/claude. The Claude Agent SDK shells out to an executable
   # literally named `claude`, so it has to be resolvable on PATH; it also
