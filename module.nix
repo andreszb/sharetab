@@ -51,13 +51,29 @@ let
       pg_isready -h /run/postgresql -q
 
       # Hand-written SQL that prisma db push cannot express (enum conversions).
-      # Upstream applies these with psql, not Prisma, and documents them as
-      # idempotent. Applied before db push, matching docker/entrypoint.sh.
-      for sqlfile in "${app}"/prisma/migrations/*.sql; do
-        [ -e "$sqlfile" ] || continue
-        echo "Applying $(basename "$sqlfile")"
-        psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$sqlfile"
-      done
+      # Upstream applies these with psql, not Prisma, and calls them
+      # idempotent — but that means safe to re-run against a database that
+      # already has the tables. Their guards test whether a *column* exists,
+      # not whether the *table* does, so against a fresh database the file
+      # fails on `ALTER TABLE "GuestSplit"` before db push has created it.
+      #
+      # On an empty schema these conversions are not merely skippable, they
+      # are meaningless: db push creates the tables with the enum already in
+      # place. So apply them only to a database that has been initialised.
+      # (docker/entrypoint.sh runs them unconditionally and has the same
+      # first-boot failure.)
+      tableCount=$(psql "$DATABASE_URL" -tAc \
+        "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public'")
+
+      if [ "$tableCount" -eq 0 ]; then
+        echo "Fresh database — skipping legacy SQL migrations"
+      else
+        for sqlfile in "${app}"/prisma/migrations/*.sql; do
+          [ -e "$sqlfile" ] || continue
+          echo "Applying $(basename "$sqlfile")"
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$sqlfile"
+        done
+      fi
 
       # db push, never migrate deploy — there is no _prisma_migrations table.
       # --skip-generate because the client was generated at build time and the
