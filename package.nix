@@ -18,6 +18,10 @@
 , prisma-engines_7
 , inter
 , jetbrains-mono
+  # Written to .commit-sha so the app does not shell out to git at startup.
+  # Any commit already changes `src`, so threading this through costs no
+  # additional rebuilds.
+, commitSha ? "unknown"
 ,
 }:
 let
@@ -209,6 +213,12 @@ stdenv.mkDerivation {
     cp -r prisma/. "$app/prisma/"
     mkdir -p "$app/src/generated"
     cp -r src/generated/. "$app/src/generated/"
+
+    # src/server/lib/build-info.ts reads this at startup and otherwise falls
+    # back to `git rev-parse`, which fails with ENOENT because git is
+    # deliberately not in the service PATH. docker/Dockerfile writes the same
+    # file from its COMMIT_SHA build arg.
+    printf "%s" "${commitSha}" > "$app/.commit-sha"
 
     # A deploy-time Prisma config with no imports.
     #
