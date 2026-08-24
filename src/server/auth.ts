@@ -9,6 +9,14 @@ import { db } from './db';
 import { logger } from './lib/logger';
 import { checkRateLimit, parsePositiveInt } from './lib/rate-limit';
 import { getClientIp, FALLBACK_IP } from './lib/client-ip';
+import { getGoogleConfig, getOidcConfig } from './lib/auth-providers';
+import { mapOidcProfile } from './lib/oidc-profile';
+
+// Resolved once at module load and shared with the `auth.getEnabledProviders`
+// tRPC query, so the login page never renders a button for a provider that
+// was not registered here.
+const googleConfig = getGoogleConfig();
+const oidcConfig = getOidcConfig();
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -86,11 +94,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     // TS attributes the diagnostic to this first spread element in the providers
     // array literal; see also the (related but not identical) upstream discussion
     // in nextauthjs/next-auth#9883 / #9890.
-    ...(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
+    ...(googleConfig
       ? [
           Google({
-            clientId: process.env.GOOGLE_CLIENT_ID,
-            clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+            clientId: googleConfig.clientId,
+            clientSecret: googleConfig.clientSecret,
           }),
         ]
       : []),
@@ -109,6 +117,36 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             },
             from: process.env.EMAIL_FROM ?? 'ShareTab <noreply@sharetab.local>',
           }),
+        ]
+      : []),
+    // Generic OIDC provider. Everything vendor-specific comes from the
+    // issuer's discovery document, so one code path covers Pocket ID,
+    // Authentik, Keycloak, Authelia and Zitadel without per-vendor branches.
+    //
+    // Account-linking and provisioning policy is deliberately not here yet.
+    // Without `allowDangerousEmailAccountLinking`, a first sign-in whose email
+    // already belongs to a password account is refused by NextAuth with
+    // `OAuthAccountNotLinked` — the safe default to ship before the policy
+    // that decides when linking is allowed.
+    // @ts-expect-error -- the same upstream NodemailerConfig["server"] typing
+    // issue described above. The diagnostic is raised against the whole
+    // providers array union and TS pins it to one spread element at a time, so
+    // adding a third spread moved it here from the Google one; the suppression
+    // has to travel with it.
+    ...(oidcConfig
+      ? [
+          {
+            id: 'oidc',
+            name: oidcConfig.name ?? 'SSO',
+            type: 'oidc' as const,
+            issuer: oidcConfig.issuer,
+            clientId: oidcConfig.clientId,
+            clientSecret: oidcConfig.clientSecret,
+            // `email` is not in the default scope set, and ShareTab cannot
+            // create a user without it.
+            authorization: { params: { scope: 'openid profile email' } },
+            profile: mapOidcProfile,
+          },
         ]
       : []),
   ],

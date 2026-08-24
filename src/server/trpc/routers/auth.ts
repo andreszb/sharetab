@@ -6,10 +6,18 @@ import { checkRateLimit, parsePositiveInt } from '../../lib/rate-limit';
 import { getClientIp } from '../../lib/client-ip';
 import { locales } from '@/i18n/routing';
 import { stripUndefined } from '../../lib/strip-undefined';
+import { getEnabledProviders } from '../../lib/auth-providers';
 
 export const authRouter = createTRPCRouter({
   getSession: publicProcedure.query(({ ctx }) => {
     return ctx.session;
+  }),
+
+  // Which third-party sign-in buttons the login page should render. Public
+  // because it is read before the user has a session, and safe to expose: it
+  // returns only provider ids and admin-chosen display names, never secrets.
+  getEnabledProviders: publicProcedure.query(() => {
+    return { providers: getEnabledProviders() };
   }),
 
   getRegistrationMode: publicProcedure.query(async ({ ctx }) => {

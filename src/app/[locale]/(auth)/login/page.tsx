@@ -13,6 +13,7 @@ import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { Receipt, Mail } from 'lucide-react';
 import { normalizeCallbackPath, stripLocalePrefix } from '@/lib/locale-paths';
+import { ProviderButtons } from '@/components/auth/provider-buttons';
 
 export default function LoginPage() {
   return (
@@ -138,14 +139,18 @@ function LoginForm() {
               </span>
             </div>
 
-            <Button
-              variant="outline"
-              className="w-full rounded-full h-10 text-sm border-primary/20 text-muted-foreground hover:text-foreground hover:border-primary/40"
-              onClick={() => setShowMagicLink(true)}
-            >
-              <Mail className="mr-2 h-4 w-4" />
-              {t('magicLink')}
-            </Button>
+            <div className="space-y-3">
+              <ProviderButtons callbackUrl={callbackPath} />
+
+              <Button
+                variant="outline"
+                className="w-full rounded-full h-10 text-sm border-primary/20 text-muted-foreground hover:text-foreground hover:border-primary/40"
+                onClick={() => setShowMagicLink(true)}
+              >
+                <Mail className="mr-2 h-4 w-4" />
+                {t('magicLink')}
+              </Button>
+            </div>
           </>
         ) : (
           <>
