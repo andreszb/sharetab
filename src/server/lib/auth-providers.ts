@@ -12,6 +12,7 @@
 
 import type { OIDCConfig } from 'next-auth/providers';
 import { mapOidcProfile, type OidcClaims } from './oidc-profile';
+import type { OidcSignInFlags } from './oidc-signin-policy';
 
 export type ThirdPartyProviderId = 'google' | 'oidc';
 
@@ -63,6 +64,21 @@ export function getOidcConfig(env: Env = process.env): OidcConfig | null {
   return { issuer, clientId, clientSecret, name: read(env, 'OIDC_NAME') ?? null };
 }
 
+/**
+ * The three flags `evaluateOidcSignIn` consults. Read through `read()` like
+ * every other `OIDC_*` var rather than off `process.env` directly: Unraid's
+ * container-variable fields do not trim, and a trailing space on
+ * `OIDC_ALLOW_LINKING=false ` would otherwise leave linking *enabled* — a
+ * security toggle that fails open.
+ */
+export function getOidcPolicyFlags(env: Env = process.env): OidcSignInFlags {
+  return {
+    allowLinking: read(env, 'OIDC_ALLOW_LINKING') !== 'false',
+    trustEmail: read(env, 'OIDC_TRUST_EMAIL') === 'true',
+    autoProvision: read(env, 'OIDC_AUTO_PROVISION') === 'true',
+  };
+}
+
 export function getEnabledProviders(env: Env = process.env): ThirdPartyProvider[] {
   const providers: ThirdPartyProvider[] = [];
   if (getGoogleConfig(env)) providers.push({ id: 'google', name: 'Google' });
@@ -91,8 +107,14 @@ export function buildOidcProvider(config: OidcConfig): OIDCConfig<OidcClaims> {
     // Pocket ID among them — reject an authorize request carrying no `state`
     // outright (`invalid_state`, "must be at least 8 characters"), so sign-in
     // never reaches the identity provider's login screen at all. State is CSRF
-    // protection worth sending to every provider regardless.
-    checks: ['pkce', 'state'],
+    // protection worth sending to every provider regardless. `nonce` binds the
+    // ID token to this session and is core OIDC — every conformant provider
+    // supports it.
+    checks: ['pkce', 'state', 'nonce'],
     profile: mapOidcProfile,
+    // Safe only because the `signIn` callback in `auth.ts` vetoes the link
+    // itself via `evaluateOidcSignIn` — it never fires on Auth.js's own
+    // (weaker) email-match check. See the comment there.
+    allowDangerousEmailAccountLinking: true,
   };
 }

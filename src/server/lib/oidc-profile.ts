@@ -18,6 +18,7 @@ export interface OidcClaims {
   family_name?: unknown;
   preferred_username?: unknown;
   email?: unknown;
+  email_verified?: unknown;
   picture?: unknown;
   locale?: unknown;
 }
@@ -28,6 +29,20 @@ export interface MappedOidcProfile {
   email: string | null;
   image: string | null;
   locale?: Locale;
+}
+
+/**
+ * The `email_verified` claim as a tri-state: true, false, or null when the
+ * provider omits it (which `OIDC_TRUST_EMAIL` governs). OIDC Core types it as
+ * a boolean, but enough providers emit the JSON *string* `"true"` that
+ * reading only booleans would silently downgrade a genuinely verified address
+ * to "unverified" and deny the user with advice they cannot act on.
+ */
+export function readEmailVerified(claim: unknown): boolean | null {
+  if (typeof claim === 'boolean') return claim;
+  if (claim === 'true') return true;
+  if (claim === 'false') return false;
+  return null;
 }
 
 function str(claim: unknown): string | null {

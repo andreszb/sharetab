@@ -15,6 +15,12 @@ import { Receipt, Mail } from 'lucide-react';
 import { normalizeCallbackPath, stripLocalePrefix } from '@/lib/locale-paths';
 import { ProviderButtons } from '@/components/auth/provider-buttons';
 
+// The codes `pages.error: '/login'` (auth.ts) can send back over `?error=`.
+// Auth.js sends others (e.g. `Verification`) that don't apply to this login
+// form's flows; `errors.default` covers those and anything unrecognized
+// rather than surfacing a raw code.
+const OIDC_ERROR_CODES = new Set(['OAuthAccountNotLinked', 'AccessDenied', 'OAuthCallbackError', 'Configuration']);
+
 export default function LoginPage() {
   return (
     <Suspense>
@@ -30,7 +36,14 @@ function LoginForm() {
   const searchParams = useSearchParams();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+  // Seeded once from `?error=` on the redirect Auth.js sends back after a
+  // denied or failed OIDC sign-in — a lazy initializer since this is a full
+  // page load, not a client-side query change to react to.
+  const [error, setError] = useState(() => {
+    const code = searchParams.get('error');
+    if (!code) return '';
+    return t(OIDC_ERROR_CODES.has(code) ? `errors.${code}` : 'errors.default');
+  });
   const [loading, setLoading] = useState(false);
   const [magicLinkEmail, setMagicLinkEmail] = useState('');
   const [magicLinkSending, setMagicLinkSending] = useState(false);

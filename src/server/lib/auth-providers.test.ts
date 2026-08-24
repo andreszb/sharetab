@@ -82,8 +82,8 @@ describe('buildOidcProvider', () => {
   // Regression: Auth.js defaults `checks` to ['pkce'] alone, and Ory Fosite
   // based providers (Pocket ID) reject an authorize request with no `state`
   // before ever showing their login screen.
-  test('requests the state check, not just pkce', () => {
-    expect(buildOidcProvider(config).checks).toEqual(['pkce', 'state']);
+  test('requests the state and nonce checks, not just pkce', () => {
+    expect(buildOidcProvider(config).checks).toEqual(['pkce', 'state', 'nonce']);
   });
 
   test('asks for the email scope, which ShareTab cannot create a user without', () => {
@@ -94,6 +94,13 @@ describe('buildOidcProvider', () => {
   test('falls back to a generic button name when OIDC_NAME is unset', () => {
     expect(buildOidcProvider(config).name).toBe('SSO');
     expect(buildOidcProvider({ ...config, name: 'Pocket ID' }).name).toBe('Pocket ID');
+  });
+
+  // The `signIn` callback in auth.ts vetoes linking itself via
+  // evaluateOidcSignIn — this only enables the flow to reach that callback
+  // instead of a bare `OAuthAccountNotLinked` from Auth.js's own check.
+  test('allows dangerous email account linking, since the signIn callback vetoes it', () => {
+    expect(buildOidcProvider(config).allowDangerousEmailAccountLinking).toBe(true);
   });
 
   test('registers under the id the callback URL is documented as', () => {
