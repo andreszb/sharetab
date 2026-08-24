@@ -309,6 +309,98 @@
     Required="false"
     Mask="true"></Config>
 
+  <!-- OIDC / SSO -->
+  <Config
+    Name="OIDC Issuer URL"
+    Target="OIDC_ISSUER"
+    Default=""
+    Description="Base URL of your OIDC identity provider (optional — enables single sign-on). Works with Pocket ID, Authentik, Keycloak, Authelia, Zitadel and anything else OIDC-compliant. Everything else is read from the issuer's discovery document. Register https://YOUR-SHARETAB-URL/api/auth/callback/oidc as the redirect URI with your provider. All three of issuer, client ID and client secret must be set before the sign-in button appears."
+    Type="Variable"
+    Display="advanced"
+    Required="false"
+    Mask="false"></Config>
+  <Config
+    Name="OIDC Client ID"
+    Target="OIDC_CLIENT_ID"
+    Default=""
+    Description="OIDC client ID issued by your identity provider"
+    Type="Variable"
+    Display="advanced"
+    Required="false"
+    Mask="false"></Config>
+  <Config
+    Name="OIDC Client Secret"
+    Target="OIDC_CLIENT_SECRET"
+    Default=""
+    Description="OIDC client secret issued by your identity provider. Required — configure the client as confidential rather than public."
+    Type="Variable"
+    Display="advanced"
+    Required="false"
+    Mask="true"></Config>
+  <Config
+    Name="OIDC Display Name"
+    Target="OIDC_NAME"
+    Default=""
+    Description="Name shown on the sign-in button, e.g. 'Pocket ID'. Leave blank for a generic 'Sign in with SSO' label."
+    Type="Variable"
+    Display="advanced"
+    Required="false"
+    Mask="false"></Config>
+  <Config
+    Name="OIDC Allow Account Linking"
+    Target="OIDC_ALLOW_LINKING"
+    Default="true"
+    Description="Link an SSO sign-in onto an existing password or Google account with the same email, but only when your provider marks that email verified. Set to false to require every SSO user to be a brand new account."
+    Type="Variable"
+    Display="advanced"
+    Required="false"
+    Mask="false"></Config>
+  <Config
+    Name="OIDC Trust Unverified Email"
+    Target="OIDC_TRUST_EMAIL"
+    Default="false"
+    Description="Treat a MISSING email_verified claim as verified, for providers that omit it entirely rather than sending false. Leave false unless you trust your provider — it governs both account linking and creating new accounts."
+    Type="Variable"
+    Display="advanced"
+    Required="false"
+    Mask="false"></Config>
+  <Config
+    Name="OIDC Auto-Provision Users"
+    Target="OIDC_AUTO_PROVISION"
+    Default="false"
+    Description="Create new users on first SSO sign-in even when registration is set to invite-only or closed."
+    Type="Variable"
+    Display="advanced"
+    Required="false"
+    Mask="false"></Config>
+  <Config
+    Name="OIDC Only Mode"
+    Target="OIDC_ONLY"
+    Default="false"
+    Description="Hide the password and magic-link forms so SSO is the only way in. The password form stays permanently reachable at /login?password=1 as break-glass. Only turn this on after confirming SSO sign-in works for every account on this instance."
+    Type="Variable"
+    Display="advanced"
+    Required="false"
+    Mask="false"></Config>
+  <Config
+    Name="OIDC Auto-Redirect"
+    Target="OIDC_AUTO_REDIRECT"
+    Default="false"
+    Description="Skip the login page entirely and go straight to your identity provider. Requires registering https://YOUR-SHARETAB-URL/login?password=1 as a post-logout redirect URI as well. /login?password=1 is the only way back if SSO breaks."
+    Type="Variable"
+    Display="advanced"
+    Required="false"
+    Mask="false"></Config>
+  <Config
+    Name="OIDC RP-Initiated Logout"
+    Target="OIDC_RP_LOGOUT"
+    Default="true"
+    Description="Also end your identity provider's own session on sign-out, not just ShareTab's. Requires the provider to advertise end_session_endpoint, and to have https://YOUR-SHARETAB-URL/login registered as a post-logout redirect URI."
+    Type="Variable"
+    Display="advanced"
+    Required="false"
+    Mask="false"></Config>
+
   <!-- Admin -->
   <Config
     Name="Admin Email"

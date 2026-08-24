@@ -3,6 +3,12 @@
   "systemHealth": {
     "title": "Estado del sistema",
     "database": "Base de datos",
+    "oidc": "OIDC / SSO",
+    "oidcGeneric": "SSO",
+    "oidcNotConfigured": "No configurado",
+    "oidcOnly": "Solo OIDC",
+    "oidcAutoRedirect": "Redirección automática",
+    "oidcRpLogout": "Cierre de sesión RP",
     "version": "Versión",
     "uptime": "Tiempo de actividad",
     "started": "Iniciado {time}"

@@ -6,7 +6,18 @@ import { trpc } from '@/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
-import { Shield, Database, Package, Clock, FolderOpen, HardDrive, FileWarning, Loader2, RefreshCw } from 'lucide-react';
+import {
+  Shield,
+  Database,
+  Package,
+  Clock,
+  FolderOpen,
+  HardDrive,
+  FileWarning,
+  Loader2,
+  RefreshCw,
+  KeyRound,
+} from 'lucide-react';
 
 import { AuditLogSection } from '@/components/admin/audit-log-section';
 import { RegistrationControlSection } from '@/components/admin/registration-control-section';
@@ -118,6 +129,37 @@ function SystemHealthSection() {
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+              <KeyRound className="h-4 w-4" />
+              {t('systemHealth.oidc')}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center gap-2">
+              {/* `data` is undefined both while loading and after a failed
+                  query. Asserting "Not configured" in the latter case would
+                  report a definite wrong state on a health dashboard, so the
+                  unknown case gets its own neutral rendering — matching how
+                  the database and uptime cards degrade. */}
+              <span
+                className={`h-2.5 w-2.5 rounded-full ${data === undefined ? 'bg-gray-400' : data.oidc.configured ? 'bg-green-500' : 'bg-gray-400'}`}
+              />
+              <span className="text-sm font-medium">
+                {data === undefined
+                  ? '---'
+                  : data.oidc.configured
+                    ? (data.oidc.name ?? t('systemHealth.oidcGeneric'))
+                    : t('systemHealth.oidcNotConfigured')}
+              </span>
+            </div>
+            {data?.oidc.configured && oidcModeLabels(data.oidc, t).length > 0 && (
+              <p className="mt-1 text-xs text-muted-foreground">{oidcModeLabels(data.oidc, t).join(' · ')}</p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
               <Clock className="h-4 w-4" />
               {t('systemHealth.uptime')}
             </CardTitle>
@@ -134,6 +176,23 @@ function SystemHealthSection() {
       </div>
     </section>
   );
+}
+
+/**
+ * The OIDC modes that are actually on. All three can legitimately be off —
+ * `OIDC_RP_LOGOUT=false` with the other two unset is a supported config — in
+ * which case the caller must skip the line entirely rather than render an
+ * empty paragraph and its margin as a stray gap.
+ */
+function oidcModeLabels(
+  oidc: { only: boolean; autoRedirect: boolean; rpLogout: boolean },
+  t: ReturnType<typeof useTranslations<'admin'>>,
+): string[] {
+  return [
+    oidc.only ? t('systemHealth.oidcOnly') : null,
+    oidc.autoRedirect ? t('systemHealth.oidcAutoRedirect') : null,
+    oidc.rpLogout ? t('systemHealth.oidcRpLogout') : null,
+  ].filter((label): label is string => label !== null);
 }
 
 // ─── Storage Stats ─────────────────────────────────────────

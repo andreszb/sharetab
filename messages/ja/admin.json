@@ -3,6 +3,12 @@
   "systemHealth": {
     "title": "システム状態",
     "database": "データベース",
+    "oidc": "OIDC / SSO",
+    "oidcGeneric": "SSO",
+    "oidcNotConfigured": "未設定",
+    "oidcOnly": "OIDCのみ",
+    "oidcAutoRedirect": "自動リダイレクト",
+    "oidcRpLogout": "RPログアウト",
     "version": "バージョン",
     "uptime": "稼働時間",
     "started": "{time}に起動"
