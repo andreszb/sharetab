@@ -1,4 +1,4 @@
-import NextAuth from 'next-auth';
+import NextAuth, { AuthError } from 'next-auth';
 import { PrismaAdapter } from '@auth/prisma-adapter';
 import Credentials from 'next-auth/providers/credentials';
 import Google from 'next-auth/providers/google';
@@ -10,6 +10,7 @@ import { logger } from './lib/logger';
 import { checkRateLimit, parsePositiveInt } from './lib/rate-limit';
 import { getClientIp, FALLBACK_IP } from './lib/client-ip';
 import { buildOidcProvider, getGoogleConfig, getOidcConfig } from './lib/auth-providers';
+import { evaluateOidcSignIn, type RegistrationMode } from './lib/oidc-signin-policy';
 
 // Resolved once at module load. The `auth.getEnabledProviders` tRPC query the
 // login page reads its buttons from calls the same `auth-providers.ts` helpers
@@ -27,11 +28,34 @@ const loginSchema = z.object({
   password: z.string().min(8),
 });
 
+// Auth.js's own `OAuthAccountNotLinked` error class lives inside next-auth's
+// privately-nested `@auth/core` copy, which has no resolvable import path
+// from application code — and `@auth/prisma-adapter` bundles a *different*
+// nested `@auth/core` version, so importing the class from there would risk
+// an `instanceof` mismatch against the copy next-auth itself checks against
+// internally. Subclassing the `AuthError` that `next-auth` re-exports at its
+// public entrypoint sidesteps that: the `signIn` callback below runs inside
+// next-auth's own instance, so `error instanceof AuthError` matches, and
+// Auth.js reads the `type` static off our class exactly like it does its own
+// built-ins — producing the same `?error=OAuthAccountNotLinked` /
+// `?error=Configuration` the login page already renders a banner for.
+class OidcAccountNotLinked extends AuthError {
+  static type = 'OAuthAccountNotLinked';
+}
+
+class OidcConfigurationError extends AuthError {
+  static type = 'Configuration';
+}
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: PrismaAdapter(db),
   session: { strategy: 'jwt' },
   pages: {
     signIn: '/login',
+    // Sending OIDC's denial/protocol errors to the login page (rather than
+    // Auth.js's built-in error page) lets it render a translated banner from
+    // the `?error=` code instead of a bare code on an unstyled page.
+    error: '/login',
     verifyRequest: '/verify-request',
   },
   providers: [
@@ -127,11 +151,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     // issuer's discovery document, so one code path covers Pocket ID,
     // Authentik, Keycloak, Authelia and Zitadel without per-vendor branches.
     //
-    // Account-linking and provisioning policy is deliberately not here yet.
-    // Without `allowDangerousEmailAccountLinking`, a first sign-in whose email
-    // already belongs to a password account is refused by NextAuth with
-    // `OAuthAccountNotLinked` — the safe default to ship before the policy
-    // that decides when linking is allowed.
+    // `allowDangerousEmailAccountLinking` skips Auth.js's own email-match
+    // check so an `OAuthAccountNotLinked` denial always reaches the `signIn`
+    // callback below, which is the one place that decision is actually made
+    // (`evaluateOidcSignIn`) rather than a bare email-string comparison.
     // @ts-expect-error -- the same upstream NodemailerConfig["server"] typing
     // issue described above. TS raises it against the providers array union and
     // pins it to one spread element at a time, so adding a third spread moved
@@ -140,6 +163,62 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     ...(oidcProvider ? [oidcProvider] : []),
   ],
   callbacks: {
+    // Runs before the adapter links or creates anything, so this is the one
+    // place account-linking and provisioning policy can veto a sign-in.
+    // Only the OIDC provider is gated here — Credentials, Google and
+    // Nodemailer keep NextAuth's defaults.
+    async signIn({ account, profile }) {
+      if (!account || account.provider !== 'oidc') return true;
+
+      // A previous sign-in already linked this exact OIDC identity to a
+      // User row: a normal re-login, always allowed regardless of the
+      // current linking/provisioning flags (those only govern the first
+      // sign-in for a given identity).
+      const alreadyLinked = await db.account.findUnique({
+        where: {
+          provider_providerAccountId: {
+            provider: 'oidc',
+            providerAccountId: account.providerAccountId,
+          },
+        },
+        select: { id: true },
+      });
+      if (alreadyLinked) return true;
+
+      const email = profile?.email?.trim() || null;
+      const existingUser = email ? await db.user.findUnique({ where: { email }, select: { id: true } }) : null;
+
+      // Only needed on the provisioning path (no existing user), so skip the
+      // query on every linking attempt.
+      const registrationSetting = existingUser
+        ? null
+        : await db.systemSetting.findUnique({ where: { key: 'registrationMode' } });
+
+      const decision = evaluateOidcSignIn({
+        email,
+        emailVerified: typeof profile?.email_verified === 'boolean' ? profile.email_verified : null,
+        alreadyLinked: false,
+        existingUserByEmail: existingUser !== null,
+        registrationMode: (registrationSetting?.value ?? 'open') as RegistrationMode,
+        flags: {
+          allowLinking: process.env.OIDC_ALLOW_LINKING !== 'false',
+          trustEmail: process.env.OIDC_TRUST_EMAIL === 'true',
+          autoProvision: process.env.OIDC_AUTO_PROVISION === 'true',
+        },
+      });
+
+      if (decision.allow) return true;
+
+      logger.warn('auth.oidc_signin_denied', { reason: decision.reason });
+
+      // `provisioning_blocked` maps to Auth.js's own `AccessDenied` via a
+      // plain `false` return. The other two reasons need a specific thrown
+      // error, since `false` always produces `AccessDenied` regardless of
+      // cause.
+      if (decision.reason === 'provisioning_blocked') return false;
+      if (decision.reason === 'no_email') throw new OidcConfigurationError();
+      throw new OidcAccountNotLinked();
+    },
     async jwt({ token, user }) {
       if (user?.id) {
         token.id = user.id;
