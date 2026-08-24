@@ -10,6 +10,9 @@
  * mutating `process.env`.
  */
 
+import type { OIDCConfig } from 'next-auth/providers';
+import { mapOidcProfile, type OidcClaims } from './oidc-profile';
+
 export type ThirdPartyProviderId = 'google' | 'oidc';
 
 export interface ThirdPartyProvider {
@@ -66,4 +69,30 @@ export function getEnabledProviders(env: Env = process.env): ThirdPartyProvider[
   const oidc = getOidcConfig(env);
   if (oidc) providers.push({ id: 'oidc', name: oidc.name });
   return providers;
+}
+
+/**
+ * The NextAuth provider built from an `OidcConfig`. Everything vendor-specific
+ * is resolved at runtime from the issuer's discovery document, so one provider
+ * covers Pocket ID, Authentik, Keycloak, Authelia and Zitadel.
+ */
+export function buildOidcProvider(config: OidcConfig): OIDCConfig<OidcClaims> {
+  return {
+    id: 'oidc',
+    name: config.name ?? 'SSO',
+    type: 'oidc',
+    issuer: config.issuer,
+    clientId: config.clientId,
+    clientSecret: config.clientSecret,
+    // `email` is not in the default scope set, and ShareTab cannot create a
+    // user without it.
+    authorization: { params: { scope: 'openid profile email' } },
+    // Auth.js defaults to `['pkce']` alone. Providers built on Ory Fosite —
+    // Pocket ID among them — reject an authorize request carrying no `state`
+    // outright (`invalid_state`, "must be at least 8 characters"), so sign-in
+    // never reaches the identity provider's login screen at all. State is CSRF
+    // protection worth sending to every provider regardless.
+    checks: ['pkce', 'state'],
+    profile: mapOidcProfile,
+  };
 }

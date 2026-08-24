@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'vitest';
-import { getEnabledProviders, getGoogleConfig, getOidcConfig } from './auth-providers';
+import { buildOidcProvider, getEnabledProviders, getGoogleConfig, getOidcConfig } from './auth-providers';
 
 const oidcEnv = {
   OIDC_ISSUER: 'https://auth.example.com',
@@ -73,5 +73,30 @@ describe('getEnabledProviders', () => {
 
   test('a half-configured provider gets no button', () => {
     expect(getEnabledProviders({ OIDC_ISSUER: 'https://auth.example.com', OIDC_CLIENT_ID: 'client' })).toEqual([]);
+  });
+});
+
+describe('buildOidcProvider', () => {
+  const config = { issuer: 'https://auth.example.com', clientId: 'c', clientSecret: 's', name: null };
+
+  // Regression: Auth.js defaults `checks` to ['pkce'] alone, and Ory Fosite
+  // based providers (Pocket ID) reject an authorize request with no `state`
+  // before ever showing their login screen.
+  test('requests the state check, not just pkce', () => {
+    expect(buildOidcProvider(config).checks).toEqual(['pkce', 'state']);
+  });
+
+  test('asks for the email scope, which ShareTab cannot create a user without', () => {
+    const authorization = buildOidcProvider(config).authorization;
+    expect(typeof authorization === 'object' && authorization?.params?.scope).toBe('openid profile email');
+  });
+
+  test('falls back to a generic button name when OIDC_NAME is unset', () => {
+    expect(buildOidcProvider(config).name).toBe('SSO');
+    expect(buildOidcProvider({ ...config, name: 'Pocket ID' }).name).toBe('Pocket ID');
+  });
+
+  test('registers under the id the callback URL is documented as', () => {
+    expect(buildOidcProvider(config).id).toBe('oidc');
   });
 });

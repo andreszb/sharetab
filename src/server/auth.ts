@@ -9,14 +9,15 @@ import { db } from './db';
 import { logger } from './lib/logger';
 import { checkRateLimit, parsePositiveInt } from './lib/rate-limit';
 import { getClientIp, FALLBACK_IP } from './lib/client-ip';
-import { getGoogleConfig, getOidcConfig } from './lib/auth-providers';
-import { mapOidcProfile } from './lib/oidc-profile';
+import { buildOidcProvider, getGoogleConfig, getOidcConfig } from './lib/auth-providers';
 
 // Resolved once at module load and shared with the `auth.getEnabledProviders`
 // tRPC query, so the login page never renders a button for a provider that
 // was not registered here.
 const googleConfig = getGoogleConfig();
 const oidcConfig = getOidcConfig();
+
+const oidcProvider = oidcConfig ? buildOidcProvider(oidcConfig) : null;
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -129,26 +130,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     // `OAuthAccountNotLinked` — the safe default to ship before the policy
     // that decides when linking is allowed.
     // @ts-expect-error -- the same upstream NodemailerConfig["server"] typing
-    // issue described above. The diagnostic is raised against the whole
-    // providers array union and TS pins it to one spread element at a time, so
-    // adding a third spread moved it here from the Google one; the suppression
-    // has to travel with it.
-    ...(oidcConfig
-      ? [
-          {
-            id: 'oidc',
-            name: oidcConfig.name ?? 'SSO',
-            type: 'oidc' as const,
-            issuer: oidcConfig.issuer,
-            clientId: oidcConfig.clientId,
-            clientSecret: oidcConfig.clientSecret,
-            // `email` is not in the default scope set, and ShareTab cannot
-            // create a user without it.
-            authorization: { params: { scope: 'openid profile email' } },
-            profile: mapOidcProfile,
-          },
-        ]
-      : []),
+    // issue described above. TS raises it against the providers array union and
+    // pins it to one spread element at a time, so adding a third spread moved
+    // it here; the suppression has to travel with it. The provider object
+    // itself is typed as OIDCConfig above, outside this suppression.
+    ...(oidcProvider ? [oidcProvider] : []),
   ],
   callbacks: {
     async jwt({ token, user }) {
