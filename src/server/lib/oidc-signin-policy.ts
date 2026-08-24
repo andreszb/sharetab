@@ -8,7 +8,8 @@
  * caller resolves those into the primitives below.
  */
 
-export type OidcDenyReason = 'no_email' | 'linking_disabled' | 'email_not_verified' | 'provisioning_blocked';
+export type OidcDenyReason =
+  'no_email' | 'linking_disabled' | 'email_not_verified' | 'email_belongs_to_other_user' | 'provisioning_blocked';
 
 export type OidcSignInDecision = { allow: true } | { allow: false; reason: OidcDenyReason };
 
@@ -24,13 +25,25 @@ export interface OidcSignInFlags {
 }
 
 export interface OidcSignInInput {
+  /**
+   * Lowercased, since `@auth/core` lowercases the mapped profile email before
+   * its own `getUserByEmail` and the caller must match that to agree with
+   * what the adapter will actually do.
+   */
   email: string | null;
   /** The ID token's `email_verified` claim; null when the provider omits it entirely. */
   emailVerified: boolean | null;
   /** A User+Account row already links this exact OIDC identity — a normal re-login. */
   alreadyLinked: boolean;
-  /** A User row with this email exists, but is not the one `alreadyLinked` refers to. */
-  existingUserByEmail: boolean;
+  /**
+   * The user this browser is already signed in as, if any. Auth.js links a
+   * new account straight onto the session user without consulting email at
+   * all (`handle-login.js`: `if (user) await linkAccount(...)`), so a policy
+   * that only looked at email would be bypassed entirely on this path.
+   */
+  sessionUserId: string | null;
+  /** The User row holding this email, if one exists. */
+  existingUserIdByEmail: string | null;
   registrationMode: RegistrationMode;
   flags: OidcSignInFlags;
 }
@@ -45,12 +58,31 @@ export function evaluateOidcSignIn(input: OidcSignInInput): OidcSignInDecision {
 
   if (!input.email) return { allow: false, reason: 'no_email' };
 
-  if (input.existingUserByEmail) {
-    if (!input.flags.allowLinking) return { allow: false, reason: 'linking_disabled' };
+  const verified = input.emailVerified === true || (input.emailVerified === null && input.flags.trustEmail);
 
-    const verified = input.emailVerified === true || (input.emailVerified === null && input.flags.trustEmail);
+  // Signed in already: Auth.js will link this identity to the session user
+  // whatever the email says, so the only useful questions are whether linking
+  // is permitted at all and whether the incoming email is safe to attach.
+  if (input.sessionUserId) {
+    if (!input.flags.allowLinking) return { allow: false, reason: 'linking_disabled' };
+    // The identity's email belongs to somebody else's account. Linking would
+    // attach it to whoever happens to be signed in on this browser.
+    if (input.existingUserIdByEmail !== null && input.existingUserIdByEmail !== input.sessionUserId) {
+      return { allow: false, reason: 'email_belongs_to_other_user' };
+    }
     return verified ? { allow: true } : { allow: false, reason: 'email_not_verified' };
   }
+
+  if (input.existingUserIdByEmail !== null) {
+    if (!input.flags.allowLinking) return { allow: false, reason: 'linking_disabled' };
+    return verified ? { allow: true } : { allow: false, reason: 'email_not_verified' };
+  }
+
+  // Provisioning is held to the same verification bar as linking. An IdP that
+  // lets anyone self-register an address they do not control would otherwise
+  // let an attacker pre-create `victim@example.com`; the victim's later magic
+  // link resolves by email onto that same row and hands over the account.
+  if (!verified) return { allow: false, reason: 'email_not_verified' };
 
   if (input.flags.autoProvision || input.registrationMode === 'open') return { allow: true };
   return { allow: false, reason: 'provisioning_blocked' };

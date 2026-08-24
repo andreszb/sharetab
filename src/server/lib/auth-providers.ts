@@ -12,6 +12,7 @@
 
 import type { OIDCConfig } from 'next-auth/providers';
 import { mapOidcProfile, type OidcClaims } from './oidc-profile';
+import type { OidcSignInFlags } from './oidc-signin-policy';
 
 export type ThirdPartyProviderId = 'google' | 'oidc';
 
@@ -61,6 +62,21 @@ export function getOidcConfig(env: Env = process.env): OidcConfig | null {
   const clientSecret = read(env, 'OIDC_CLIENT_SECRET');
   if (!issuer || !clientId || !clientSecret) return null;
   return { issuer, clientId, clientSecret, name: read(env, 'OIDC_NAME') ?? null };
+}
+
+/**
+ * The three flags `evaluateOidcSignIn` consults. Read through `read()` like
+ * every other `OIDC_*` var rather than off `process.env` directly: Unraid's
+ * container-variable fields do not trim, and a trailing space on
+ * `OIDC_ALLOW_LINKING=false ` would otherwise leave linking *enabled* — a
+ * security toggle that fails open.
+ */
+export function getOidcPolicyFlags(env: Env = process.env): OidcSignInFlags {
+  return {
+    allowLinking: read(env, 'OIDC_ALLOW_LINKING') !== 'false',
+    trustEmail: read(env, 'OIDC_TRUST_EMAIL') === 'true',
+    autoProvision: read(env, 'OIDC_AUTO_PROVISION') === 'true',
+  };
 }
 
 export function getEnabledProviders(env: Env = process.env): ThirdPartyProvider[] {

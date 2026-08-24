@@ -9,8 +9,9 @@ import { db } from './db';
 import { logger } from './lib/logger';
 import { checkRateLimit, parsePositiveInt } from './lib/rate-limit';
 import { getClientIp, FALLBACK_IP } from './lib/client-ip';
-import { buildOidcProvider, getGoogleConfig, getOidcConfig } from './lib/auth-providers';
+import { buildOidcProvider, getGoogleConfig, getOidcConfig, getOidcPolicyFlags } from './lib/auth-providers';
 import { evaluateOidcSignIn, type RegistrationMode } from './lib/oidc-signin-policy';
+import { readEmailVerified } from './lib/oidc-profile';
 
 // Resolved once at module load. The `auth.getEnabledProviders` tRPC query the
 // login page reads its buttons from calls the same `auth-providers.ts` helpers
@@ -170,54 +171,105 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async signIn({ account, profile }) {
       if (!account || account.provider !== 'oidc') return true;
 
-      // A previous sign-in already linked this exact OIDC identity to a
-      // User row: a normal re-login, always allowed regardless of the
-      // current linking/provisioning flags (those only govern the first
-      // sign-in for a given identity).
-      const alreadyLinked = await db.account.findUnique({
-        where: {
-          provider_providerAccountId: {
-            provider: 'oidc',
-            providerAccountId: account.providerAccountId,
+      try {
+        // A previous sign-in already linked this exact OIDC identity to a
+        // User row: a normal re-login, always allowed regardless of the
+        // current linking/provisioning flags (those only govern the first
+        // sign-in for a given identity).
+        const alreadyLinked = await db.account.findUnique({
+          where: {
+            provider_providerAccountId: {
+              provider: 'oidc',
+              providerAccountId: account.providerAccountId,
+            },
           },
-        },
-        select: { id: true },
-      });
-      if (alreadyLinked) return true;
+          select: { id: true },
+        });
+        if (alreadyLinked) return true;
 
-      const email = profile?.email?.trim() || null;
-      const existingUser = email ? await db.user.findUnique({ where: { email }, select: { id: true } }) : null;
+        // Lowercased to match what the adapter will do: `@auth/core`'s OAuth
+        // callback lowercases the mapped email before its own
+        // `getUserByEmail`, so reasoning about the raw claim here would let
+        // this callback and the adapter disagree about which user is meant.
+        const email = profile?.email?.trim().toLowerCase() || null;
 
-      // Only needed on the provisioning path (no existing user), so skip the
-      // query on every linking attempt.
-      const registrationSetting = existingUser
-        ? null
-        : await db.systemSetting.findUnique({ where: { key: 'registrationMode' } });
+        // Case-insensitive because ShareTab stores emails verbatim — a row
+        // registered as `Ada@Example.com` is invisible to an exact lookup for
+        // `ada@example.com`, and the adapter's own lookup would miss it too
+        // and quietly create a *second* account for the same person.
+        const matches = email
+          ? await db.user.findMany({
+              where: { email: { equals: email, mode: 'insensitive' } },
+              select: { id: true, email: true },
+            })
+          : [];
 
-      const decision = evaluateOidcSignIn({
-        email,
-        emailVerified: typeof profile?.email_verified === 'boolean' ? profile.email_verified : null,
-        alreadyLinked: false,
-        existingUserByEmail: existingUser !== null,
-        registrationMode: (registrationSetting?.value ?? 'open') as RegistrationMode,
-        flags: {
-          allowLinking: process.env.OIDC_ALLOW_LINKING !== 'false',
-          trustEmail: process.env.OIDC_TRUST_EMAIL === 'true',
-          autoProvision: process.env.OIDC_AUTO_PROVISION === 'true',
-        },
-      });
+        // Two rows already differ only in case. Normalising either would
+        // violate the unique index, and picking one arbitrarily would attach
+        // the identity to a coin flip — an operator has to merge them first.
+        if (matches.length > 1) {
+          logger.error('auth.oidc_signin_ambiguous_email', { count: matches.length });
+          throw new OidcConfigurationError();
+        }
+        const existingUser = matches[0] ?? null;
 
-      if (decision.allow) return true;
+        // Auth.js links a new account onto whoever this browser is already
+        // signed in as, consulting email only when there is no session
+        // (`handle-login.js`). `/login` is a public route, so that path is
+        // reachable by a signed-in user clicking the SSO button, and a policy
+        // that ignored it would simply not run.
+        const session = await auth();
+        const sessionUserId = session?.user?.id ?? null;
 
-      logger.warn('auth.oidc_signin_denied', { reason: decision.reason });
+        // Only consulted on the provisioning path, so skip the query whenever
+        // this is a link onto an account that already exists.
+        const registrationSetting =
+          existingUser || sessionUserId
+            ? null
+            : await db.systemSetting.findUnique({ where: { key: 'registrationMode' } });
 
-      // `provisioning_blocked` maps to Auth.js's own `AccessDenied` via a
-      // plain `false` return. The other two reasons need a specific thrown
-      // error, since `false` always produces `AccessDenied` regardless of
-      // cause.
-      if (decision.reason === 'provisioning_blocked') return false;
-      if (decision.reason === 'no_email') throw new OidcConfigurationError();
-      throw new OidcAccountNotLinked();
+        const decision = evaluateOidcSignIn({
+          email,
+          emailVerified: readEmailVerified(profile?.email_verified),
+          alreadyLinked: false,
+          sessionUserId,
+          existingUserIdByEmail: existingUser?.id ?? null,
+          registrationMode: (registrationSetting?.value ?? 'open') as RegistrationMode,
+          flags: getOidcPolicyFlags(),
+        });
+
+        if (decision.allow) {
+          // The adapter is about to look this user up by the lowercased
+          // email. If the stored row differs only in case that lookup misses
+          // and a duplicate account is created instead of the link the policy
+          // just approved, so bring the row into agreement first.
+          if (email && existingUser && existingUser.email !== email) {
+            await db.user.update({ where: { id: existingUser.id }, data: { email } });
+            logger.info('auth.oidc_email_normalized', { userId: existingUser.id });
+          }
+          return true;
+        }
+
+        logger.warn('auth.oidc_signin_denied', { reason: decision.reason });
+
+        // `provisioning_blocked` maps to Auth.js's own `AccessDenied` via a
+        // plain `false` return. The other reasons need a specific thrown
+        // error, since `false` always produces `AccessDenied` regardless of
+        // cause.
+        if (decision.reason === 'provisioning_blocked') return false;
+        if (decision.reason === 'no_email') throw new OidcConfigurationError();
+        throw new OidcAccountNotLinked();
+      } catch (error) {
+        // Auth.js turns *any* uncaught throw in this callback into
+        // `AccessDenied`, whose banner tells the user to ask for an invite —
+        // wrong and unactionable when the real cause is the database being
+        // briefly unreachable. Deliberate denials are already `AuthError`s.
+        if (error instanceof AuthError) throw error;
+        logger.error('auth.oidc_signin_error', {
+          error: error instanceof Error ? error.message : String(error),
+        });
+        throw new OidcConfigurationError();
+      }
     },
     async jwt({ token, user }) {
       if (user?.id) {

@@ -7,12 +7,16 @@ const defaultFlags: OidcSignInFlags = {
   autoProvision: false,
 };
 
+const ADA = 'user_ada';
+const BOB = 'user_bob';
+
 function input(overrides: Partial<OidcSignInInput> = {}): OidcSignInInput {
   return {
     email: 'ada@example.com',
     emailVerified: true,
     alreadyLinked: false,
-    existingUserByEmail: false,
+    sessionUserId: null,
+    existingUserIdByEmail: null,
     registrationMode: 'open',
     flags: defaultFlags,
     ...overrides,
@@ -26,7 +30,7 @@ describe('evaluateOidcSignIn', () => {
         input({
           alreadyLinked: true,
           // Even flags that would otherwise deny every other branch don't matter here.
-          existingUserByEmail: true,
+          existingUserIdByEmail: ADA,
           emailVerified: false,
           registrationMode: 'closed',
           flags: { allowLinking: false, trustEmail: false, autoProvision: false },
@@ -39,22 +43,22 @@ describe('evaluateOidcSignIn', () => {
     expect(evaluateOidcSignIn(input({ email: null }))).toEqual({ allow: false, reason: 'no_email' });
   });
 
-  describe('linking (existingUserByEmail: true)', () => {
+  describe('linking (a User already holds this email)', () => {
     test('links when email_verified is true', () => {
-      expect(evaluateOidcSignIn(input({ existingUserByEmail: true, emailVerified: true }))).toEqual({
+      expect(evaluateOidcSignIn(input({ existingUserIdByEmail: ADA, emailVerified: true }))).toEqual({
         allow: true,
       });
     });
 
     test('refuses when email_verified is false', () => {
-      expect(evaluateOidcSignIn(input({ existingUserByEmail: true, emailVerified: false }))).toEqual({
+      expect(evaluateOidcSignIn(input({ existingUserIdByEmail: ADA, emailVerified: false }))).toEqual({
         allow: false,
         reason: 'email_not_verified',
       });
     });
 
     test('refuses when email_verified is absent and OIDC_TRUST_EMAIL is off', () => {
-      expect(evaluateOidcSignIn(input({ existingUserByEmail: true, emailVerified: null }))).toEqual({
+      expect(evaluateOidcSignIn(input({ existingUserIdByEmail: ADA, emailVerified: null }))).toEqual({
         allow: false,
         reason: 'email_not_verified',
       });
@@ -64,7 +68,7 @@ describe('evaluateOidcSignIn', () => {
       expect(
         evaluateOidcSignIn(
           input({
-            existingUserByEmail: true,
+            existingUserIdByEmail: ADA,
             emailVerified: null,
             flags: { ...defaultFlags, trustEmail: true },
           }),
@@ -76,7 +80,7 @@ describe('evaluateOidcSignIn', () => {
       expect(
         evaluateOidcSignIn(
           input({
-            existingUserByEmail: true,
+            existingUserIdByEmail: ADA,
             emailVerified: false,
             flags: { ...defaultFlags, trustEmail: true },
           }),
@@ -88,7 +92,7 @@ describe('evaluateOidcSignIn', () => {
       expect(
         evaluateOidcSignIn(
           input({
-            existingUserByEmail: true,
+            existingUserIdByEmail: ADA,
             emailVerified: true,
             flags: { ...defaultFlags, allowLinking: false },
           }),
@@ -97,7 +101,49 @@ describe('evaluateOidcSignIn', () => {
     });
   });
 
-  describe('provisioning (existingUserByEmail: false)', () => {
+  // Auth.js links a new account straight onto the session user without
+  // consulting email, so these cases have to be decided here or not at all.
+  describe('linking onto an existing session', () => {
+    test('links a first-time identity onto the signed-in user', () => {
+      expect(evaluateOidcSignIn(input({ sessionUserId: ADA, existingUserIdByEmail: ADA }))).toEqual({ allow: true });
+    });
+
+    test('links even when no User holds the OIDC email yet', () => {
+      expect(evaluateOidcSignIn(input({ sessionUserId: ADA, existingUserIdByEmail: null }))).toEqual({ allow: true });
+    });
+
+    test('refuses when the OIDC email belongs to a different account', () => {
+      expect(evaluateOidcSignIn(input({ sessionUserId: ADA, existingUserIdByEmail: BOB }))).toEqual({
+        allow: false,
+        reason: 'email_belongs_to_other_user',
+      });
+    });
+
+    test('honours OIDC_ALLOW_LINKING=false, which the email-only path could not see', () => {
+      expect(
+        evaluateOidcSignIn(
+          input({
+            sessionUserId: ADA,
+            existingUserIdByEmail: null,
+            flags: { ...defaultFlags, allowLinking: false },
+          }),
+        ),
+      ).toEqual({ allow: false, reason: 'linking_disabled' });
+    });
+
+    test('still requires a verified email', () => {
+      expect(evaluateOidcSignIn(input({ sessionUserId: ADA, emailVerified: false }))).toEqual({
+        allow: false,
+        reason: 'email_not_verified',
+      });
+    });
+
+    test('does not consult registrationMode — nothing is being provisioned', () => {
+      expect(evaluateOidcSignIn(input({ sessionUserId: ADA, registrationMode: 'closed' }))).toEqual({ allow: true });
+    });
+  });
+
+  describe('provisioning (no User holds this email)', () => {
     test('allows a new user when registrationMode is open', () => {
       expect(evaluateOidcSignIn(input({ registrationMode: 'open' }))).toEqual({ allow: true });
     });
@@ -126,6 +172,31 @@ describe('evaluateOidcSignIn', () => {
       expect(
         evaluateOidcSignIn(input({ registrationMode: 'closed', flags: { ...defaultFlags, autoProvision: true } })),
       ).toEqual({ allow: true });
+    });
+
+    test('refuses an unverified email even when registration is open', () => {
+      // Otherwise an IdP with open self-registration lets an attacker
+      // pre-create a row for an address they do not control.
+      expect(evaluateOidcSignIn(input({ emailVerified: false }))).toEqual({
+        allow: false,
+        reason: 'email_not_verified',
+      });
+    });
+
+    test('refuses a missing email_verified claim unless OIDC_TRUST_EMAIL is on', () => {
+      expect(evaluateOidcSignIn(input({ emailVerified: null }))).toEqual({
+        allow: false,
+        reason: 'email_not_verified',
+      });
+      expect(evaluateOidcSignIn(input({ emailVerified: null, flags: { ...defaultFlags, trustEmail: true } }))).toEqual({
+        allow: true,
+      });
+    });
+
+    test('OIDC_AUTO_PROVISION does not waive the verification requirement', () => {
+      expect(
+        evaluateOidcSignIn(input({ emailVerified: false, flags: { ...defaultFlags, autoProvision: true } })),
+      ).toEqual({ allow: false, reason: 'email_not_verified' });
     });
   });
 });
