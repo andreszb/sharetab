@@ -185,7 +185,20 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           },
           select: { id: true },
         });
-        if (alreadyLinked) return true;
+        if (alreadyLinked) {
+          // Keep the stored token current. The adapter writes `id_token` only
+          // once, at `linkAccount`, so RP-initiated logout's `id_token_hint`
+          // would otherwise be the token from the very first sign-in —
+          // expired within the hour, and months stale on a long-lived
+          // account, which providers that validate the hint will reject.
+          if (account.id_token) {
+            await db.account.update({
+              where: { id: alreadyLinked.id },
+              data: { id_token: account.id_token },
+            });
+          }
+          return true;
+        }
 
         // Lowercased to match what the adapter will do: `@auth/core`'s OAuth
         // callback lowercases the mapped email before its own

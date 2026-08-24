@@ -124,6 +124,17 @@ function RegisterForm() {
         {oidcOnly ? (
           <div className="space-y-3">
             {error && <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
+            {/* The password form's own closed notice is skipped on this branch,
+                so repeat it here — otherwise a closed instance shows a bare SSO
+                button that round-trips to the IdP only to bounce back with an
+                error. Existing users can still sign in through it, so the
+                button stays. Auto-provisioning ignores registrationMode, in
+                which case the notice would be wrong. */}
+            {mode === 'closed' && !(providerData?.oidcAutoProvision ?? false) && (
+              <div className="rounded-md bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-200">
+                {t('error.closed')}
+              </div>
+            )}
             <ProviderButtons callbackUrl={callbackPath} />
           </div>
         ) : (

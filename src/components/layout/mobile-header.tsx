@@ -10,7 +10,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/co
 import { LayoutDashboard, Users, Receipt, LogOut, Settings, Shield, Menu, Scissors } from 'lucide-react';
 import { ThemeToggle } from '@/components/layout/theme-toggle';
 import { LanguageSwitcher } from '@/components/layout/language-switcher';
-import { useTranslations } from 'next-intl';
+import { useTranslations, useLocale } from 'next-intl';
 
 const navItems = [
   { href: '/dashboard', key: 'dashboard', icon: LayoutDashboard },
@@ -24,6 +24,7 @@ export function MobileHeader({ isAdmin }: { isAdmin?: boolean }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const t = useTranslations('common');
+  const locale = useLocale();
   const utils = trpc.useUtils();
 
   return (
@@ -82,7 +83,7 @@ export function MobileHeader({ isAdmin }: { isAdmin?: boolean }) {
               <button
                 onClick={() => {
                   setOpen(false);
-                  void signOutWithOidc(utils);
+                  void signOutWithOidc(utils, locale);
                 }}
                 className="flex flex-1 items-center gap-3 text-sm font-medium text-muted-foreground transition-colors duration-200 hover:text-foreground"
               >

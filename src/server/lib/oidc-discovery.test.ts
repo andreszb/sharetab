@@ -15,7 +15,10 @@ describe('fetchOidcEndSessionEndpoint', () => {
 
     const endpoint = await fetchOidcEndSessionEndpoint('https://auth.example.com');
     expect(endpoint).toBe('https://auth.example.com/api/oidc/end-session');
-    expect(mockFetch).toHaveBeenCalledWith('https://auth.example.com/.well-known/openid-configuration');
+    expect(mockFetch).toHaveBeenCalledWith(
+      'https://auth.example.com/.well-known/openid-configuration',
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
   });
 
   test('strips a trailing slash off the issuer before appending the well-known path', async () => {
@@ -26,7 +29,10 @@ describe('fetchOidcEndSessionEndpoint', () => {
     vi.stubGlobal('fetch', mockFetch);
 
     await fetchOidcEndSessionEndpoint('https://auth.example.com/');
-    expect(mockFetch).toHaveBeenCalledWith('https://auth.example.com/.well-known/openid-configuration');
+    expect(mockFetch).toHaveBeenCalledWith(
+      'https://auth.example.com/.well-known/openid-configuration',
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
   });
 
   test('returns null when the provider omits end_session_endpoint', async () => {
@@ -50,6 +56,27 @@ describe('fetchOidcEndSessionEndpoint', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValueOnce({ ok: true, json: () => Promise.reject(new Error('bad json')) }),
+    );
+    expect(await fetchOidcEndSessionEndpoint('https://auth.example.com')).toBeNull();
+  });
+
+  test('passes an abort signal so a stalled issuer cannot hang sign-out', async () => {
+    const mockFetch = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ end_session_endpoint: 'https://auth.example.com/end-session' }),
+    });
+    vi.stubGlobal('fetch', mockFetch);
+
+    await fetchOidcEndSessionEndpoint('https://auth.example.com');
+
+    const signal = (mockFetch.mock.calls[0]?.[1] as { signal?: AbortSignal } | undefined)?.signal;
+    expect(signal).toBeInstanceOf(AbortSignal);
+  });
+
+  test('returns null rather than throwing when the request times out', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockRejectedValueOnce(new DOMException('The operation was aborted', 'TimeoutError')),
     );
     expect(await fetchOidcEndSessionEndpoint('https://auth.example.com')).toBeNull();
   });

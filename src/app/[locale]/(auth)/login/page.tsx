@@ -11,7 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
-import { Receipt, Mail } from 'lucide-react';
+import { Receipt, Mail, Loader2 } from 'lucide-react';
 import { normalizeCallbackPath, stripLocalePrefix } from '@/lib/locale-paths';
 import { ProviderButtons } from '@/components/auth/provider-buttons';
 import { trpc } from '@/lib/trpc';
@@ -58,7 +58,10 @@ function LoginForm() {
   // can never lock the owner out of their own login form.
   const breakGlass = searchParams.get('password') === '1';
   const errorParam = searchParams.get('error');
-  const { data: providerData } = trpc.auth.getEnabledProviders.useQuery();
+  // A *failed* query deliberately falls through to the password form below:
+  // both flags default off, which is the safe direction — the credentials
+  // form is the break-glass, so an unreachable server must never hide it.
+  const { data: providerData, isPending: providersPending } = trpc.auth.getEnabledProviders.useQuery();
   const oidcOnly = (providerData?.oidcOnly ?? false) && !breakGlass;
   // Never auto-redirect when we just bounced back with an error, or the
   // failure (or a denied linking/provisioning decision) would loop forever
@@ -109,6 +112,19 @@ function LoginForm() {
     } else {
       router.push('/verify-request');
     }
+  }
+
+  // Hold the card until the flags are known. Painting the password form
+  // first and swapping it out a round trip later lets a user on an
+  // OIDC_ONLY instance start typing into a form that is about to vanish.
+  if (providersPending) {
+    return (
+      <Card className="border-primary/10 shadow-lg shadow-primary/5">
+        <CardContent className="flex items-center justify-center py-10">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        </CardContent>
+      </Card>
+    );
   }
 
   if (autoRedirect) {

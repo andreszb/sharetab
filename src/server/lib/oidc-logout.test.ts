@@ -13,6 +13,7 @@ function input(overrides: Partial<OidcLogoutInput> = {}): OidcLogoutInput {
     endSessionEndpoint: 'https://auth.example.com/api/oidc/end-session',
     clientId: 'sharetab',
     baseUrl: 'https://sharetab.example.com',
+    locale: 'en',
     flags: defaultFlags,
     ...overrides,
   };
@@ -33,16 +34,36 @@ describe('computeOidcLogout', () => {
     const result = computeOidcLogout(input({ flags: { ...defaultFlags, autoRedirect: true } }));
     const url = new URL(result.url!);
     expect(url.searchParams.get('post_logout_redirect_uri')).toBe('https://sharetab.example.com/login?password=1');
-    expect(result.fallbackCallbackUrl).toBe('/login?password=1');
+    expect(result.fallbackCallbackUrl).toBe('/en/login?password=1');
   });
 
   test('fallbackCallbackUrl is plain /login when auto-redirect is off', () => {
-    expect(computeOidcLogout(input()).fallbackCallbackUrl).toBe('/login');
+    expect(computeOidcLogout(input()).fallbackCallbackUrl).toBe('/en/login');
+  });
+
+  test('fallbackCallbackUrl carries the signing-out user locale', () => {
+    expect(computeOidcLogout(input({ locale: 'ja' })).fallbackCallbackUrl).toBe('/ja/login');
+    expect(computeOidcLogout(input({ locale: 'pt-BR' })).fallbackCallbackUrl).toBe('/pt-BR/login');
+  });
+
+  test('post_logout_redirect_uri stays locale-free so one URL can be registered with the IdP', () => {
+    const url = new URL(computeOidcLogout(input({ locale: 'ja' })).url!);
+    expect(url.searchParams.get('post_logout_redirect_uri')).toBe('https://sharetab.example.com/login');
+  });
+
+  test('omits post_logout_redirect_uri entirely when NEXTAUTH_URL is unset', () => {
+    // A relative URI is invalid per RP-Initiated Logout and gets the whole
+    // request rejected — after the local session has already been dropped.
+    const result = computeOidcLogout(input({ baseUrl: null }));
+    const url = new URL(result.url!);
+    expect(url.searchParams.has('post_logout_redirect_uri')).toBe(false);
+    expect(url.searchParams.get('id_token_hint')).toBe('id-token-abc');
+    expect(result.fallbackCallbackUrl).toBe('/en/login');
   });
 
   test('falls back to local-only sign-out when OIDC_RP_LOGOUT is off', () => {
     const result = computeOidcLogout(input({ flags: { ...defaultFlags, rpLogoutEnabled: false } }));
-    expect(result).toEqual({ url: null, fallbackCallbackUrl: '/login' });
+    expect(result).toEqual({ url: null, fallbackCallbackUrl: '/en/login' });
   });
 
   test('falls back to local-only sign-out when the user has no OIDC account', () => {
@@ -64,6 +85,6 @@ describe('computeOidcLogout', () => {
     const result = computeOidcLogout(
       input({ endSessionEndpoint: null, flags: { ...defaultFlags, autoRedirect: true } }),
     );
-    expect(result).toEqual({ url: null, fallbackCallbackUrl: '/login?password=1' });
+    expect(result).toEqual({ url: null, fallbackCallbackUrl: '/en/login?password=1' });
   });
 });

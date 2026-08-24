@@ -9,7 +9,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { LayoutDashboard, Users, Receipt, LogOut, Settings, Shield, Heart, Scissors } from 'lucide-react';
 import { ThemeToggle } from '@/components/layout/theme-toggle';
 import { LanguageSwitcher } from '@/components/layout/language-switcher';
-import { useTranslations } from 'next-intl';
+import { useTranslations, useLocale } from 'next-intl';
 
 function SponsorBanner() {
   const t = useTranslations('common');
@@ -52,6 +52,7 @@ type SidebarUser = {
 export function AppSidebar({ user, isAdmin }: { user: SidebarUser; isAdmin?: boolean }) {
   const pathname = usePathname();
   const t = useTranslations('common');
+  const locale = useLocale();
   const utils = trpc.useUtils();
 
   const initials = user.name
@@ -136,7 +137,7 @@ export function AppSidebar({ user, isAdmin }: { user: SidebarUser; isAdmin?: boo
               variant="ghost"
               size="xs"
               className="gap-2 text-muted-foreground"
-              onClick={() => void signOutWithOidc(utils)}
+              onClick={() => void signOutWithOidc(utils, locale)}
             >
               <LogOut className="h-3.5 w-3.5" />
               {t('nav.signOut')}

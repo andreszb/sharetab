@@ -4,9 +4,9 @@ import { TRPCError } from '@trpc/server';
 import { createTRPCRouter, publicProcedure, protectedProcedure } from '../init';
 import { checkRateLimit, parsePositiveInt } from '../../lib/rate-limit';
 import { getClientIp } from '../../lib/client-ip';
-import { locales } from '@/i18n/routing';
+import { locales, routing } from '@/i18n/routing';
 import { stripUndefined } from '../../lib/strip-undefined';
-import { getEnabledProviders, getOidcConfig, getOidcModes } from '../../lib/auth-providers';
+import { getEnabledProviders, getOidcConfig, getOidcModes, getOidcPolicyFlags } from '../../lib/auth-providers';
 import { fetchOidcEndSessionEndpoint } from '../../lib/oidc-discovery';
 import { computeOidcLogout } from '../../lib/oidc-logout';
 
@@ -21,7 +21,14 @@ export const authRouter = createTRPCRouter({
   // configuration, never secrets.
   getEnabledProviders: publicProcedure.query(() => {
     const modes = getOidcModes();
-    return { providers: getEnabledProviders(), oidcOnly: modes.only, oidcAutoRedirect: modes.autoRedirect };
+    return {
+      providers: getEnabledProviders(),
+      oidcOnly: modes.only,
+      oidcAutoRedirect: modes.autoRedirect,
+      // So /register can tell a closed instance that still provisions SSO
+      // users apart from one where the SSO button will bounce them back.
+      oidcAutoProvision: getOidcPolicyFlags().autoProvision,
+    };
   }),
 
   // Where sign-out should send the browser. Resolved server-side because it
@@ -46,7 +53,10 @@ export const authRouter = createTRPCRouter({
       idToken: account?.id_token ?? null,
       endSessionEndpoint,
       clientId: oidcConfig?.clientId ?? '',
-      baseUrl: (process.env.NEXTAUTH_URL ?? '').replace(/\/$/, ''),
+      // Null rather than '' when unset: an empty base would yield a relative
+      // `post_logout_redirect_uri`, which IdPs reject outright.
+      baseUrl: (process.env.NEXTAUTH_URL ?? '').replace(/\/$/, '') || null,
+      locale: ctx.user.locale ?? routing.defaultLocale,
       flags: { rpLogoutEnabled: modes.rpLogout, autoRedirect: modes.autoRedirect },
     });
   }),
