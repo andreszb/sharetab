@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import { Link, usePathname } from '@/i18n/navigation';
-import { signOut } from 'next-auth/react';
+import { signOutWithOidc } from '@/lib/oidc-sign-out';
+import { trpc } from '@/lib/trpc';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
@@ -24,6 +25,7 @@ export function MobileHeader({ isAdmin }: { isAdmin?: boolean }) {
   const [open, setOpen] = useState(false);
   const t = useTranslations('common');
   const locale = useLocale();
+  const utils = trpc.useUtils();
 
   return (
     <header className="sticky top-0 z-50 flex h-14 items-center justify-between border-b border-border/60 bg-background/80 px-4 backdrop-blur-md supports-[backdrop-filter]:bg-background/60 lg:hidden">
@@ -81,7 +83,7 @@ export function MobileHeader({ isAdmin }: { isAdmin?: boolean }) {
               <button
                 onClick={() => {
                   setOpen(false);
-                  signOut({ callbackUrl: `/${locale}/login` });
+                  void signOutWithOidc(utils, locale);
                 }}
                 className="flex flex-1 items-center gap-3 text-sm font-medium text-muted-foreground transition-colors duration-200 hover:text-foreground"
               >

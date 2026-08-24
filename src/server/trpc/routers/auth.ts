@@ -4,20 +4,61 @@ import { TRPCError } from '@trpc/server';
 import { createTRPCRouter, publicProcedure, protectedProcedure } from '../init';
 import { checkRateLimit, parsePositiveInt } from '../../lib/rate-limit';
 import { getClientIp } from '../../lib/client-ip';
-import { locales } from '@/i18n/routing';
+import { locales, routing } from '@/i18n/routing';
 import { stripUndefined } from '../../lib/strip-undefined';
-import { getEnabledProviders } from '../../lib/auth-providers';
+import { getEnabledProviders, getOidcConfig, getOidcModes, getOidcPolicyFlags } from '../../lib/auth-providers';
+import { fetchOidcEndSessionEndpoint } from '../../lib/oidc-discovery';
+import { computeOidcLogout } from '../../lib/oidc-logout';
 
 export const authRouter = createTRPCRouter({
   getSession: publicProcedure.query(({ ctx }) => {
     return ctx.session;
   }),
 
-  // Which third-party sign-in buttons the login page should render. Public
-  // because it is read before the user has a session, and safe to expose: it
-  // returns only provider ids and admin-chosen display names, never secrets.
+  // Which third-party sign-in buttons the login page should render, and
+  // which OIDC modes are in effect. Public because it is read before the
+  // user has a session, and safe to expose: providers/modes are admin-chosen
+  // configuration, never secrets.
   getEnabledProviders: publicProcedure.query(() => {
-    return { providers: getEnabledProviders() };
+    const modes = getOidcModes();
+    return {
+      providers: getEnabledProviders(),
+      oidcOnly: modes.only,
+      oidcAutoRedirect: modes.autoRedirect,
+      // So /register can tell a closed instance that still provisions SSO
+      // users apart from one where the SSO button will bounce them back.
+      oidcAutoProvision: getOidcPolicyFlags().autoProvision,
+    };
+  }),
+
+  // Where sign-out should send the browser. Resolved server-side because it
+  // needs the stored Account.id_token and a live fetch of the issuer's
+  // discovery document — see computeOidcLogout for why local-only sign-out
+  // isn't enough once RP-initiated logout applies.
+  getLogoutUrl: protectedProcedure.query(async ({ ctx }) => {
+    const modes = getOidcModes();
+    const oidcConfig = getOidcConfig();
+
+    const account = oidcConfig
+      ? await ctx.db.account.findFirst({
+          where: { userId: ctx.user.id, provider: 'oidc' },
+          select: { id_token: true },
+        })
+      : null;
+
+    const endSessionEndpoint = oidcConfig && account ? await fetchOidcEndSessionEndpoint(oidcConfig.issuer) : null;
+
+    return computeOidcLogout({
+      hasOidcAccount: account !== null,
+      idToken: account?.id_token ?? null,
+      endSessionEndpoint,
+      clientId: oidcConfig?.clientId ?? '',
+      // Null rather than '' when unset: an empty base would yield a relative
+      // `post_logout_redirect_uri`, which IdPs reject outright.
+      baseUrl: (process.env.NEXTAUTH_URL ?? '').replace(/\/$/, '') || null,
+      locale: ctx.user.locale ?? routing.defaultLocale,
+      flags: { rpLogoutEnabled: modes.rpLogout, autoRedirect: modes.autoRedirect },
+    });
   }),
 
   getRegistrationMode: publicProcedure.query(async ({ ctx }) => {

@@ -16,11 +16,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { trpc } from '@/lib/trpc';
 import { useSession } from 'next-auth/react';
-
-function setLocaleCookie(locale: string) {
-  const secure = window.location.protocol === 'https:' ? ';secure' : '';
-  document.cookie = `NEXT_LOCALE=${encodeURIComponent(locale)};path=/;max-age=31536000;samesite=lax${secure}`;
-}
+import { setLocaleCookie } from '@/lib/locale-cookie';
 
 export function LanguageSwitcher() {
   return (

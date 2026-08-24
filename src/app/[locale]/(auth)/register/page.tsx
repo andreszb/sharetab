@@ -15,6 +15,7 @@ import { Separator } from '@/components/ui/separator';
 import { Receipt } from 'lucide-react';
 import { trpc } from '@/lib/trpc';
 import { normalizeCallbackPath, stripLocalePrefix } from '@/lib/locale-paths';
+import { ProviderButtons } from '@/components/auth/provider-buttons';
 
 type RegistrationErrorKey = 'emailTaken' | 'inviteRequired' | 'inviteInvalid' | 'closed' | 'generic';
 
@@ -53,6 +54,9 @@ export default function RegisterPage() {
 
 function RegisterForm() {
   const t = useTranslations('auth.register');
+  // ProviderButtons already sources its own copy from this namespace; reused
+  // here too rather than duplicating an `or` key under `auth.register`.
+  const tLogin = useTranslations('auth.login');
   const locale = useLocale() as Locale;
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -65,8 +69,11 @@ function RegisterForm() {
 
   const regMode = trpc.auth.getRegistrationMode.useQuery();
   const registerMutation = trpc.auth.register.useMutation();
+  const { data: providerData } = trpc.auth.getEnabledProviders.useQuery();
 
   const mode = regMode.data?.mode ?? 'open';
+  const oidcOnly = providerData?.oidcOnly ?? false;
+  const hasProviders = (providerData?.providers.length ?? 0) > 0;
   const callbackPath = normalizeCallbackPath(searchParams.get('callbackUrl'), locale);
   const callbackHref = stripLocalePrefix(callbackPath);
   const loginHref = `/login?callbackUrl=${encodeURIComponent(callbackPath)}`;
@@ -114,66 +121,101 @@ function RegisterForm() {
         <CardDescription className="mt-1">{t('subtitle')}</CardDescription>
       </CardHeader>
       <CardContent className="pt-4">
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {error && <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
-          <div className="space-y-2">
-            <Label htmlFor="name">{t('name')}</Label>
-            <Input
-              id="name"
-              type="text"
-              placeholder={t('namePlaceholder')}
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-            />
+        {oidcOnly ? (
+          <div className="space-y-3">
+            {error && <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
+            {/* The password form's own closed notice is skipped on this branch,
+                so repeat it here — otherwise a closed instance shows a bare SSO
+                button that round-trips to the IdP only to bounce back with an
+                error. Existing users can still sign in through it, so the
+                button stays. Auto-provisioning ignores registrationMode, in
+                which case the notice would be wrong. */}
+            {mode === 'closed' && !(providerData?.oidcAutoProvision ?? false) && (
+              <div className="rounded-md bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-200">
+                {t('error.closed')}
+              </div>
+            )}
+            <ProviderButtons callbackUrl={callbackPath} />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="email">{t('email')}</Label>
-            <Input
-              id="email"
-              type="email"
-              placeholder={t('emailPlaceholder')}
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="password">{t('password')}</Label>
-            <Input
-              id="password"
-              type="password"
-              placeholder={t('passwordPlaceholder')}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              minLength={8}
-            />
-          </div>
-          {mode === 'invite-only' && (
-            <div className="space-y-2">
-              <Label htmlFor="inviteCode">{t('inviteCode')}</Label>
-              <Input
-                id="inviteCode"
-                type="text"
-                placeholder={t('inviteCodePlaceholder')}
-                value={inviteCode}
-                onChange={(e) => setInviteCode(e.target.value)}
-                required
-              />
-              <p className="text-xs text-muted-foreground">{t('error.inviteRequired')}</p>
-            </div>
-          )}
-          {mode === 'closed' ? (
-            <div className="rounded-md bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-200">
-              {t('error.closed')}
-            </div>
-          ) : (
-            <Button type="submit" className="w-full rounded-full h-10 text-sm font-medium mt-2" disabled={loading}>
-              {loading ? t('submitting') : t('submit')}
-            </Button>
-          )}
-        </form>
+        ) : (
+          <>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              {error && <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
+              <div className="space-y-2">
+                <Label htmlFor="name">{t('name')}</Label>
+                <Input
+                  id="name"
+                  type="text"
+                  placeholder={t('namePlaceholder')}
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="email">{t('email')}</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder={t('emailPlaceholder')}
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="password">{t('password')}</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  placeholder={t('passwordPlaceholder')}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  minLength={8}
+                />
+              </div>
+              {mode === 'invite-only' && (
+                <div className="space-y-2">
+                  <Label htmlFor="inviteCode">{t('inviteCode')}</Label>
+                  <Input
+                    id="inviteCode"
+                    type="text"
+                    placeholder={t('inviteCodePlaceholder')}
+                    value={inviteCode}
+                    onChange={(e) => setInviteCode(e.target.value)}
+                    required
+                  />
+                  <p className="text-xs text-muted-foreground">{t('error.inviteRequired')}</p>
+                </div>
+              )}
+              {mode === 'closed' ? (
+                <div className="rounded-md bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-200">
+                  {t('error.closed')}
+                </div>
+              ) : (
+                <Button type="submit" className="w-full rounded-full h-10 text-sm font-medium mt-2" disabled={loading}>
+                  {loading ? t('submitting') : t('submit')}
+                </Button>
+              )}
+            </form>
+
+            {hasProviders && (
+              <>
+                <div className="relative my-8">
+                  <Separator />
+                  <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-card px-3 text-xs text-muted-foreground uppercase tracking-wider">
+                    {tLogin('or')}
+                  </span>
+                </div>
+
+                <div className="space-y-3">
+                  <ProviderButtons callbackUrl={callbackPath} />
+                </div>
+              </>
+            )}
+          </>
+        )}
 
         <div className="relative my-8">
           <Separator />

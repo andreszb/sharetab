@@ -1,7 +1,8 @@
 'use client';
 
 import { Link, usePathname } from '@/i18n/navigation';
-import { signOut } from 'next-auth/react';
+import { signOutWithOidc } from '@/lib/oidc-sign-out';
+import { trpc } from '@/lib/trpc';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -52,6 +53,7 @@ export function AppSidebar({ user, isAdmin }: { user: SidebarUser; isAdmin?: boo
   const pathname = usePathname();
   const t = useTranslations('common');
   const locale = useLocale();
+  const utils = trpc.useUtils();
 
   const initials = user.name
     ? user.name
@@ -135,7 +137,7 @@ export function AppSidebar({ user, isAdmin }: { user: SidebarUser; isAdmin?: boo
               variant="ghost"
               size="xs"
               className="gap-2 text-muted-foreground"
-              onClick={() => signOut({ callbackUrl: `/${locale}/login` })}
+              onClick={() => void signOutWithOidc(utils, locale)}
             >
               <LogOut className="h-3.5 w-3.5" />
               {t('nav.signOut')}
