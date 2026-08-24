@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'vitest';
-import { buildOidcProvider, getEnabledProviders, getGoogleConfig, getOidcConfig } from './auth-providers';
+import { buildOidcProvider, getEnabledProviders, getGoogleConfig, getOidcConfig, getOidcModes } from './auth-providers';
 
 const oidcEnv = {
   OIDC_ISSUER: 'https://auth.example.com',
@@ -73,6 +73,32 @@ describe('getEnabledProviders', () => {
 
   test('a half-configured provider gets no button', () => {
     expect(getEnabledProviders({ OIDC_ISSUER: 'https://auth.example.com', OIDC_CLIENT_ID: 'client' })).toEqual([]);
+  });
+});
+
+describe('getOidcModes', () => {
+  test('everything defaults off except rpLogout, when OIDC is configured', () => {
+    expect(getOidcModes(oidcEnv)).toEqual({ only: false, autoRedirect: false, rpLogout: true });
+  });
+
+  test('only and autoRedirect turn on via their env vars', () => {
+    expect(getOidcModes({ ...oidcEnv, OIDC_ONLY: 'true' }).only).toBe(true);
+    expect(getOidcModes({ ...oidcEnv, OIDC_AUTO_REDIRECT: 'true' }).autoRedirect).toBe(true);
+  });
+
+  test('rpLogout turns off only via an explicit "false"', () => {
+    expect(getOidcModes({ ...oidcEnv, OIDC_RP_LOGOUT: 'false' }).rpLogout).toBe(false);
+    expect(getOidcModes({ ...oidcEnv, OIDC_RP_LOGOUT: 'anything-else' }).rpLogout).toBe(true);
+  });
+
+  // Regression: a leftover OIDC_ONLY=true from a removed provider must never
+  // lock every user out with no working sign-in method.
+  test('only and autoRedirect force off when OIDC is not configured, even if their env vars are set', () => {
+    expect(getOidcModes({ OIDC_ONLY: 'true', OIDC_AUTO_REDIRECT: 'true' })).toEqual({
+      only: false,
+      autoRedirect: false,
+      rpLogout: true,
+    });
   });
 });
 

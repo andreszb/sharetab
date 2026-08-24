@@ -87,6 +87,29 @@ export function getEnabledProviders(env: Env = process.env): ThirdPartyProvider[
   return providers;
 }
 
+export interface OidcModes {
+  /** OIDC_ONLY — hide password/magic-link auth on /login and /register. */
+  only: boolean;
+  /** OIDC_AUTO_REDIRECT — skip /login entirely and go straight to the IdP. */
+  autoRedirect: boolean;
+  /** OIDC_RP_LOGOUT, default true — also close the IdP's own session on sign-out. */
+  rpLogout: boolean;
+}
+
+/**
+ * `only` and `autoRedirect` are forced off when OIDC itself isn't configured,
+ * so a stray `OIDC_ONLY=true` left over from a removed provider can never
+ * lock every user out of the app with no working sign-in method at all.
+ */
+export function getOidcModes(env: Env = process.env): OidcModes {
+  const configured = getOidcConfig(env) !== null;
+  return {
+    only: configured && read(env, 'OIDC_ONLY') === 'true',
+    autoRedirect: configured && read(env, 'OIDC_AUTO_REDIRECT') === 'true',
+    rpLogout: read(env, 'OIDC_RP_LOGOUT') !== 'false',
+  };
+}
+
 /**
  * The NextAuth provider built from an `OidcConfig`. Everything vendor-specific
  * is resolved at runtime from the issuer's discovery document, so one provider

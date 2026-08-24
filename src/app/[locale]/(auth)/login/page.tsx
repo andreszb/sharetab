@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { signIn } from 'next-auth/react';
 import { useLocale, useTranslations } from 'next-intl';
 import { useSearchParams } from 'next/navigation';
@@ -14,6 +14,7 @@ import { Separator } from '@/components/ui/separator';
 import { Receipt, Mail } from 'lucide-react';
 import { normalizeCallbackPath, stripLocalePrefix } from '@/lib/locale-paths';
 import { ProviderButtons } from '@/components/auth/provider-buttons';
+import { trpc } from '@/lib/trpc';
 
 // The codes `pages.error: '/login'` (auth.ts) can send back over `?error=`.
 // Auth.js sends others (e.g. `Verification`) that don't apply to this login
@@ -51,6 +52,22 @@ function LoginForm() {
   const callbackPath = normalizeCallbackPath(searchParams.get('callbackUrl'), locale);
   const callbackHref = stripLocalePrefix(callbackPath);
   const registerHref = `/register?callbackUrl=${encodeURIComponent(callbackPath)}`;
+
+  // `?password=1` is a permanent break-glass: it makes this page behave as if
+  // OIDC_ONLY were off, regardless of the actual flag, so a misconfigured IdP
+  // can never lock the owner out of their own login form.
+  const breakGlass = searchParams.get('password') === '1';
+  const errorParam = searchParams.get('error');
+  const { data: providerData } = trpc.auth.getEnabledProviders.useQuery();
+  const oidcOnly = (providerData?.oidcOnly ?? false) && !breakGlass;
+  // Never auto-redirect when we just bounced back with an error, or the
+  // failure (or a denied linking/provisioning decision) would loop forever
+  // between here and the IdP.
+  const autoRedirect = (providerData?.oidcAutoRedirect ?? false) && !breakGlass && !errorParam;
+
+  useEffect(() => {
+    if (autoRedirect) void signIn('oidc', { callbackUrl: callbackPath });
+  }, [autoRedirect, callbackPath]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -94,6 +111,14 @@ function LoginForm() {
     }
   }
 
+  if (autoRedirect) {
+    return (
+      <Card className="border-primary/10 shadow-lg shadow-primary/5">
+        <CardContent className="py-10 text-center text-sm text-muted-foreground">{t('redirecting')}</CardContent>
+      </Card>
+    );
+  }
+
   return (
     <Card className="border-primary/10 shadow-lg shadow-primary/5">
       <CardHeader className="text-center pb-2">
@@ -104,7 +129,12 @@ function LoginForm() {
         <CardDescription className="mt-1">{t('subtitle')}</CardDescription>
       </CardHeader>
       <CardContent className="pt-4">
-        {!showMagicLink ? (
+        {oidcOnly ? (
+          <div className="space-y-3">
+            {error && <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
+            <ProviderButtons callbackUrl={callbackPath} />
+          </div>
+        ) : !showMagicLink ? (
           <>
             <form onSubmit={handleSubmit} className="space-y-4">
               {error && <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
