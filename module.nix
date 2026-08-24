@@ -32,11 +32,11 @@ let
   #
   # Peer auth is why the unit runs as a static user rather than under
   # DynamicUser: PostgreSQL matches the OS user name against the role.
-  databaseUrl = "postgresql://${cfg.user}@localhost/${cfg.database.name}?host=/run/postgresql";
+  localDatabaseUrl = "postgresql://${cfg.user}@localhost/${cfg.database.name}?host=/run/postgresql";
 
   # Replaces docker/claude. The Claude Agent SDK shells out to an executable
   # literally named `claude`, so it has to be resolvable on PATH; it also
-  # insists on a writable HOME, which is the unit's StateDirectory.
+  # insists on a writable HOME, which is stateDir.
   claudeShim = pkgs.writeShellApplication {
     name = "claude";
     runtimeInputs = [ cfg.package.passthru.nodejs ];
@@ -45,52 +45,72 @@ let
     '';
   };
 
+  # config.services.postgresql.package has no value unless the server module is
+  # enabled, so reaching for it unconditionally makes createLocally = false an
+  # eval error rather than an external-database setup. Only psql and pg_isready
+  # are needed here.
+  psqlPackage =
+    if cfg.database.createLocally then config.services.postgresql.package else pkgs.postgresql;
+
   preStart = pkgs.writeShellApplication {
     name = "sharetab-pre-start";
-    runtimeInputs = [ config.services.postgresql.package pkgs.prisma ];
+    runtimeInputs = [ psqlPackage pkgs.prisma ];
     text = ''
-      # ExecStartPre runs before postgresql.service is necessarily accepting
-      # connections, even with an After= ordering — the unit is considered
-      # started once the postmaster forks, not once it is ready.
+      # ExecStartPre runs before the database is necessarily accepting
+      # connections, even with an After= ordering — postgresql.service counts
+      # as started once the postmaster forks, not once it is ready.
+      #
+      # -d takes a full conninfo string, so this probes whatever DATABASE_URL
+      # points at. Hardcoding -h /run/postgresql would make the probe fail
+      # unconditionally against an external database.
       for _ in $(seq 1 30); do
-        if pg_isready -h /run/postgresql -q; then break; fi
+        if pg_isready -d "$DATABASE_URL" -q; then break; fi
         sleep 1
       done
-      pg_isready -h /run/postgresql -q
+      pg_isready -d "$DATABASE_URL" -q
 
-      # Hand-written SQL that prisma db push cannot express (enum conversions).
-      # Upstream applies these with psql, not Prisma, and calls them
-      # idempotent — but that means safe to re-run against a database that
-      # already has the tables. Their guards test whether a *column* exists,
-      # not whether the *table* does, so against a fresh database the file
-      # fails on `ALTER TABLE "GuestSplit"` before db push has created it.
-      #
-      # On an empty schema these conversions are not merely skippable, they
-      # are meaningless: db push creates the tables with the enum already in
-      # place. So apply them only to a database that has been initialised.
-      # (docker/entrypoint.sh runs them unconditionally and has the same
-      # first-boot failure.)
-      tableCount=$(psql "$DATABASE_URL" -tAc \
-        "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public'")
-
-      if [ "$tableCount" -eq 0 ]; then
-        echo "Fresh database — skipping legacy SQL migrations"
-      else
+      applyLegacySql() {
         for sqlfile in "${app}"/prisma/migrations/*.sql; do
           [ -e "$sqlfile" ] || continue
           echo "Applying $(basename "$sqlfile")"
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$sqlfile"
         done
-      fi
+      }
 
-      # db push, never migrate deploy — there is no _prisma_migrations table.
-      #
-      # No --skip-generate: Prisma 7 removed the flag (db push no longer runs
-      # generators), and passing it makes the CLI print usage and exit 1. The
-      # client was generated at build time anyway, and the store path it was
-      # written to is read-only.
       cd "${app}"
-      prisma db push
+
+      tableCount=$(psql "$DATABASE_URL" -tAc \
+        "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public'")
+
+      # Hand-written SQL that prisma db push cannot express (enum conversions).
+      # Upstream applies these with psql, not Prisma, and calls them idempotent
+      # — but their guards test whether a *column* exists, not whether the
+      # *table* does, so against an empty schema they fail on
+      # `ALTER TABLE "GuestSplit"` before db push has created it.
+      # (docker/entrypoint.sh runs them unconditionally and has the same
+      # first-boot failure.)
+      #
+      # Reordering rather than skipping is what makes that safe. On an existing
+      # database the conversions have to run first, or db push tries to change
+      # the column type itself; on a fresh one db push goes first so the tables
+      # exist, and each guard then correctly no-ops against the schema it just
+      # created. Skipping the files outright on a fresh database — the obvious
+      # fix — would silently defer any future migration that *does* need to run
+      # on a new install until the second start.
+      #
+      # db push, never migrate deploy: there is no _prisma_migrations table.
+      # No --skip-generate either — Prisma 7 removed the flag (db push no
+      # longer runs generators) and passing it makes the CLI print usage and
+      # exit 1. The client was generated at build time anyway, into a store
+      # path that is read-only.
+      if [ "$tableCount" -eq 0 ]; then
+        echo "Fresh database — creating schema before legacy SQL migrations"
+        prisma db push
+        applyLegacySql
+      else
+        applyLegacySql
+        prisma db push
+      fi
     '';
   };
 in
@@ -138,6 +158,9 @@ in
       description = ''
         Persistent state: uploaded receipts and, when a subscription-backed AI
         provider is used, the Claude and ChatGPT OAuth credential stores.
+
+        Also the service's HOME, which is not incidental — the Meridian proxy
+        resolves its credential file from homedir() with no override.
       '';
     };
 
@@ -155,13 +178,37 @@ in
     database.createLocally = mkOption {
       type = types.bool;
       default = true;
-      description = "Provision the database and role in the system PostgreSQL cluster.";
+      description = ''
+        Provision the database and role in the system PostgreSQL cluster.
+
+        When disabled, point database.url at an existing database; nothing else
+        in this module assumes a local cluster.
+      '';
     };
 
     database.name = mkOption {
       type = types.str;
       default = "sharetab";
-      description = "Database name.";
+      description = ''
+        Database name. With createLocally enabled this must match
+        services.sharetab.user, because the role is created with
+        ensureDBOwnership.
+      '';
+    };
+
+    database.url = mkOption {
+      type = types.str;
+      default = localDatabaseUrl;
+      defaultText = lib.literalExpression ''"postgresql://''${cfg.user}@localhost/''${cfg.database.name}?host=/run/postgresql"'';
+      example = "postgresql://sharetab@db.internal:5432/sharetab";
+      description = ''
+        Connection string for both the pre-start migrations and the app. The
+        default connects to the local cluster over its unix socket with peer
+        authentication.
+
+        A URL with a password in it would land in the world-readable store; put
+        DATABASE_URL in environmentFile instead, which overrides this.
+      '';
     };
 
     settings = mkOption {
@@ -179,6 +226,20 @@ in
   };
 
   config = mkIf cfg.enable {
+    assertions = [
+      {
+        assertion = cfg.database.createLocally -> cfg.database.name == cfg.user;
+        message = ''
+          services.sharetab.database.name ("${cfg.database.name}") must equal
+          services.sharetab.user ("${cfg.user}") while
+          services.sharetab.database.createLocally is enabled: the role is
+          created with ensureDBOwnership, which requires a database of the same
+          name. Set both options, or provision the database yourself and point
+          services.sharetab.database.url at it.
+        '';
+      }
+    ];
+
     services.postgresql = mkIf cfg.database.createLocally {
       enable = true;
       ensureDatabases = [ cfg.database.name ];
@@ -198,14 +259,41 @@ in
 
     users.groups.${cfg.group} = { };
 
+    # StateDirectory= would be simpler, but it is relative to /var/lib and so
+    # cannot honour a stateDir pointing anywhere else — it would create
+    # /var/lib/sharetab while every path below pointed somewhere never created,
+    # and read-only under ProtectSystem=strict.
+    systemd.tmpfiles.settings."10-sharetab" =
+      let
+        dir = {
+          d = {
+            inherit (cfg) user group;
+            mode = "0700";
+          };
+        };
+      in
+      {
+        "${cfg.stateDir}" = dir;
+        "${cfg.stateDir}/uploads" = dir;
+        "${cfg.stateDir}/uploads/receipts" = dir;
+        "${cfg.stateDir}/.claude" = dir;
+        "${cfg.stateDir}/chatgpt" = dir;
+      };
+
     systemd.services.sharetab = {
       description = "ShareTab expense sharing";
       wantedBy = [ "multi-user.target" ];
       wants = [ "network-online.target" ];
+
+      # postgresql.target, not postgresql.service: the role and database come
+      # from postgresql-setup.service, a separate oneshot. Ordering against the
+      # service alone lets the pre-start race it — pg_isready succeeds as soon
+      # as the postmaster accepts connections, and psql then fails with
+      # `role "sharetab" does not exist`. The target requires both units.
       after =
         [ "network-online.target" ]
-        ++ lib.optional cfg.database.createLocally "postgresql.service";
-      requires = lib.optional cfg.database.createLocally "postgresql.service";
+        ++ lib.optional cfg.database.createLocally "postgresql.target";
+      requires = lib.optional cfg.database.createLocally "postgresql.target";
 
       environment =
         {
@@ -216,7 +304,7 @@ in
           # app directly even though the firewall already blocks it.
           HOSTNAME = "127.0.0.1";
 
-          DATABASE_URL = databaseUrl;
+          DATABASE_URL = cfg.database.url;
           NEXTAUTH_URL = "https://${cfg.domain}";
 
           # NextAuth v5 refuses to trust a forwarded Host header without this,
@@ -224,7 +312,14 @@ in
           AUTH_TRUST_HOST = "true";
 
           UPLOAD_DIR = "${cfg.stateDir}/uploads";
-          CLAUDE_DIR = "${cfg.stateDir}/claude";
+
+          # Must stay $HOME/.claude. The app writes .credentials.json here,
+          # but the Meridian proxy that later reads it resolves
+          # `homedir() + "/.claude/.credentials.json"` with no env override —
+          # so anything else completes the OAuth flow and then fails every
+          # scan as unauthenticated. entrypoint.sh reconciles the two with a
+          # symlink; naming the directory correctly is the same fix.
+          CLAUDE_DIR = "${cfg.stateDir}/.claude";
 
           # entrypoint.sh sets this without exporting it, so the container
           # silently falls back to the hardcoded /app/chatgpt. Export it here.
@@ -246,8 +341,9 @@ in
 
         EnvironmentFile = mkIf (cfg.environmentFile != null) cfg.environmentFile;
 
-        StateDirectory = "sharetab sharetab/uploads sharetab/uploads/receipts sharetab/claude sharetab/chatgpt";
-        StateDirectoryMode = "0700";
+        # Carves stateDir back out of ProtectSystem=strict; tmpfiles above
+        # creates it.
+        ReadWritePaths = [ cfg.stateDir ];
 
         # Spaced at the width of systemd's default start-rate-limit window:
         # the default RestartSec of 100ms burns all five allowed starts in
@@ -258,7 +354,7 @@ in
 
         # DynamicUser and PrivateUsers are deliberately absent: peer auth
         # matches on a stable OS user name, and the credential stores under
-        # StateDirectory need stable ownership across restarts.
+        # stateDir need stable ownership across restarts.
         NoNewPrivileges = true;
         PrivateTmp = true;
         ProtectHome = true;
