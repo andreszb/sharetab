@@ -187,6 +187,21 @@ if [ -n "$GOOGLE_CLIENT_ID" ]; then
 else
   echo "  Google OAuth:   disabled"
 fi
+# All three are required, so report the partial case explicitly: a missing
+# client secret on a public IdP client is the usual reason the sign-in button
+# never appears, and "disabled" alone would give an operator nothing to go on.
+if [ -n "$OIDC_ISSUER" ] && [ -n "$OIDC_CLIENT_ID" ] && [ -n "$OIDC_CLIENT_SECRET" ]; then
+  echo "  OIDC / SSO:     enabled"
+  echo "  OIDC Issuer:    ${OIDC_ISSUER}"
+  echo "  OIDC Name:      ${OIDC_NAME:-not set}"
+  echo "  OIDC Only:      ${OIDC_ONLY:-false}"
+  echo "  OIDC Redirect:  ${OIDC_AUTO_REDIRECT:-false}"
+  echo "  OIDC RP Logout: ${OIDC_RP_LOGOUT:-true}"
+elif [ -n "$OIDC_ISSUER" ] || [ -n "$OIDC_CLIENT_ID" ] || [ -n "$OIDC_CLIENT_SECRET" ]; then
+  echo "  OIDC / SSO:     INCOMPLETE (needs OIDC_ISSUER + OIDC_CLIENT_ID + OIDC_CLIENT_SECRET)"
+else
+  echo "  OIDC / SSO:     disabled"
+fi
 echo "  Log Level:      ${LOG_LEVEL:-info}"
 echo "============================================"
 echo ""

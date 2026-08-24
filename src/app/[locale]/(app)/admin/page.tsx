@@ -135,23 +135,24 @@ function SystemHealthSection() {
           </CardHeader>
           <CardContent>
             <div className="flex items-center gap-2">
-              <span className={`h-2.5 w-2.5 rounded-full ${data?.oidc.configured ? 'bg-green-500' : 'bg-gray-400'}`} />
+              {/* `data` is undefined both while loading and after a failed
+                  query. Asserting "Not configured" in the latter case would
+                  report a definite wrong state on a health dashboard, so the
+                  unknown case gets its own neutral rendering — matching how
+                  the database and uptime cards degrade. */}
+              <span
+                className={`h-2.5 w-2.5 rounded-full ${data === undefined ? 'bg-gray-400' : data.oidc.configured ? 'bg-green-500' : 'bg-gray-400'}`}
+              />
               <span className="text-sm font-medium">
-                {data?.oidc.configured
-                  ? (data.oidc.name ?? t('systemHealth.oidcGeneric'))
-                  : t('systemHealth.oidcNotConfigured')}
+                {data === undefined
+                  ? '---'
+                  : data.oidc.configured
+                    ? (data.oidc.name ?? t('systemHealth.oidcGeneric'))
+                    : t('systemHealth.oidcNotConfigured')}
               </span>
             </div>
-            {data?.oidc.configured && (
-              <p className="mt-1 text-xs text-muted-foreground">
-                {[
-                  data.oidc.only && t('systemHealth.oidcOnly'),
-                  data.oidc.autoRedirect && t('systemHealth.oidcAutoRedirect'),
-                  data.oidc.rpLogout && t('systemHealth.oidcRpLogout'),
-                ]
-                  .filter(Boolean)
-                  .join(' · ')}
-              </p>
+            {data?.oidc.configured && oidcModeLabels(data.oidc, t).length > 0 && (
+              <p className="mt-1 text-xs text-muted-foreground">{oidcModeLabels(data.oidc, t).join(' · ')}</p>
             )}
           </CardContent>
         </Card>
@@ -175,6 +176,23 @@ function SystemHealthSection() {
       </div>
     </section>
   );
+}
+
+/**
+ * The OIDC modes that are actually on. All three can legitimately be off —
+ * `OIDC_RP_LOGOUT=false` with the other two unset is a supported config — in
+ * which case the caller must skip the line entirely rather than render an
+ * empty paragraph and its margin as a stray gap.
+ */
+function oidcModeLabels(
+  oidc: { only: boolean; autoRedirect: boolean; rpLogout: boolean },
+  t: ReturnType<typeof useTranslations<'admin'>>,
+): string[] {
+  return [
+    oidc.only ? t('systemHealth.oidcOnly') : null,
+    oidc.autoRedirect ? t('systemHealth.oidcAutoRedirect') : null,
+    oidc.rpLogout ? t('systemHealth.oidcRpLogout') : null,
+  ].filter((label): label is string => label !== null);
 }
 
 // ─── Storage Stats ─────────────────────────────────────────

@@ -292,20 +292,31 @@ AI_PROVIDER_PRIORITY="openai-codex,meridian"
 
 One generic OIDC provider, configured via issuer discovery rather than a per-vendor preset. Works with any OIDC-compliant identity provider -- [Pocket ID](https://github.com/pocket-id/pocket-id), Authentik, Keycloak, Authelia, Zitadel, and others. Setting `OIDC_ISSUER`, `OIDC_CLIENT_ID`, and `OIDC_CLIENT_SECRET` enables a "Sign in with SSO" button on `/login` and `/register`; the rest are optional tuning knobs.
 
-| Variable              | Default | Description                                                                                                                                                      |
-| --------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `OIDC_ISSUER`         |         | Issuer URL, e.g. `https://auth.example.com`. ShareTab reads `${OIDC_ISSUER}/.well-known/openid-configuration` for the rest of the endpoints.                     |
-| `OIDC_CLIENT_ID`      |         | Client ID registered with the IdP.                                                                                                                               |
-| `OIDC_CLIENT_SECRET`  |         | Client secret. Leave the client's "public"/PKCE-only toggle off -- ShareTab is a confidential (server-side) client and needs a real secret.                      |
-| `OIDC_NAME`           |         | Display name for the sign-in button, e.g. `Pocket ID`. Unset renders a generic "Sign in with SSO" label.                                                         |
-| `OIDC_ALLOW_LINKING`  | `true`  | Link an OIDC sign-in onto an existing password/Google account with the same email, but only when the IdP marks that email `email_verified: true`.                |
-| `OIDC_TRUST_EMAIL`    | `false` | Treat a _missing_ `email_verified` claim as verified, for IdPs that omit the claim rather than sending `false`. Leave off unless you trust your IdP.             |
-| `OIDC_AUTO_PROVISION` | `false` | Provision new users on first OIDC sign-in even when registration is invite-only or closed, bypassing the normal registration mode.                               |
-| `OIDC_ONLY`           | `false` | Hide the password/magic-link form on `/login` and `/register`. `/login?password=1` is a permanent break-glass back to the password form.                         |
-| `OIDC_AUTO_REDIRECT`  | `false` | Skip `/login` entirely and redirect straight to the IdP. Only enable once OIDC sign-in is confirmed working for every account on the instance.                   |
-| `OIDC_RP_LOGOUT`      | `true`  | Also end the IdP's own session on sign-out (RP-initiated logout) instead of just ShareTab's local session. Requires the IdP to advertise `end_session_endpoint`. |
+| Variable              | Default | Description                                                                                                                                                                                                                                                     |
+| --------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `OIDC_ISSUER`         |         | Issuer URL, e.g. `https://auth.example.com`. ShareTab reads `${OIDC_ISSUER}/.well-known/openid-configuration` for the rest of the endpoints.                                                                                                                    |
+| `OIDC_CLIENT_ID`      |         | Client ID registered with the IdP.                                                                                                                                                                                                                              |
+| `OIDC_CLIENT_SECRET`  |         | Client secret. Leave the client's "public"/PKCE-only toggle off -- ShareTab is a confidential (server-side) client and needs a real secret.                                                                                                                     |
+| `OIDC_NAME`           |         | Display name for the sign-in button, e.g. `Pocket ID`. Unset renders a generic "Sign in with SSO" label.                                                                                                                                                        |
+| `OIDC_ALLOW_LINKING`  | `true`  | Link an OIDC sign-in onto an existing password/Google account with the same email, but only when the IdP marks that email `email_verified: true`.                                                                                                               |
+| `OIDC_TRUST_EMAIL`    | `false` | Treat a _missing_ `email_verified` claim as verified, for IdPs that omit the claim rather than sending `false`. Governs both linking and provisioning -- an unverified address is never turned into a new account either. Leave off unless you trust your IdP.  |
+| `OIDC_AUTO_PROVISION` | `false` | Provision new users on first OIDC sign-in even when registration is invite-only or closed, bypassing the normal registration mode. It does not bypass the `email_verified` requirement.                                                                         |
+| `OIDC_ONLY`           | `false` | Hide the password/magic-link form on `/login` and `/register`. `/login?password=1` is a permanent break-glass back to the password form.                                                                                                                        |
+| `OIDC_AUTO_REDIRECT`  | `false` | Skip `/login` entirely and redirect straight to the IdP. Also changes the post-logout redirect URI to `${NEXTAUTH_URL}/login?password=1`, which has to be registered too. Only enable once OIDC sign-in is confirmed working for every account on the instance. |
+| `OIDC_RP_LOGOUT`      | `true`  | Also end the IdP's own session on sign-out (RP-initiated logout) instead of just ShareTab's local session. Requires the IdP to advertise `end_session_endpoint` **and** to have the post-logout redirect URI below registered.                                  |
 
-Callback URL to register with the IdP: `${NEXTAUTH_URL}/api/auth/callback/oidc` (e.g. `https://sharetab.example.com/api/auth/callback/oidc`). Some IdPs (Pocket ID among them) match callback URLs as a literal path rather than a wildcard, so register the exact path.
+Two URLs need registering with the IdP, not one:
+
+| Register as              | Value                                    |
+| ------------------------ | ---------------------------------------- |
+| Callback / redirect URI  | `${NEXTAUTH_URL}/api/auth/callback/oidc` |
+| Post-logout redirect URI | `${NEXTAUTH_URL}/login`                  |
+
+For `https://sharetab.example.com` those are `https://sharetab.example.com/api/auth/callback/oidc` and `https://sharetab.example.com/login`.
+
+The post-logout URI is only used when `OIDC_RP_LOGOUT` is on, which it is by default. Skip registering it and the first sign-out lands on the IdP’s "invalid post_logout_redirect_uri" error page -- after ShareTab’s own session has already been cleared. If you also enable `OIDC_AUTO_REDIRECT`, register `${NEXTAUTH_URL}/login?password=1` instead: auto-redirect changes the post-logout destination so signing out cannot bounce straight back into a still-open IdP session. Setting `OIDC_RP_LOGOUT=false` drops the requirement entirely, at the cost of leaving the IdP session open on sign-out.
+
+Some IdPs (Pocket ID among them) match both URLs as a literal path rather than a wildcard, so register the exact paths.
 
 Roll out in two steps: ship `OIDC_ISSUER`/`OIDC_CLIENT_ID`/`OIDC_CLIENT_SECRET` first, alongside the existing password form, and confirm SSO sign-in works for every account. Only then set `OIDC_ONLY=true` and `OIDC_AUTO_REDIRECT=true` -- `/login?password=1` stays available as a fallback either way.
 
