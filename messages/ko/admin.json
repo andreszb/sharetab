@@ -3,6 +3,12 @@
   "systemHealth": {
     "title": "시스템 상태",
     "database": "데이터베이스",
+    "oidc": "OIDC / SSO",
+    "oidcGeneric": "SSO",
+    "oidcNotConfigured": "설정되지 않음",
+    "oidcOnly": "OIDC 전용",
+    "oidcAutoRedirect": "자동 리디렉션",
+    "oidcRpLogout": "RP 로그아웃",
     "version": "버전",
     "uptime": "가동 시간",
     "started": "{time}에 시작됨"

@@ -6,7 +6,18 @@ import { trpc } from '@/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
-import { Shield, Database, Package, Clock, FolderOpen, HardDrive, FileWarning, Loader2, RefreshCw } from 'lucide-react';
+import {
+  Shield,
+  Database,
+  Package,
+  Clock,
+  FolderOpen,
+  HardDrive,
+  FileWarning,
+  Loader2,
+  RefreshCw,
+  KeyRound,
+} from 'lucide-react';
 
 import { AuditLogSection } from '@/components/admin/audit-log-section';
 import { RegistrationControlSection } from '@/components/admin/registration-control-section';
@@ -111,6 +122,36 @@ function SystemHealthSection() {
             <span className="text-sm font-medium">v{data?.version}</span>
             {data?.commitSha && data.commitSha !== 'unknown' && (
               <span className="ml-2 text-xs text-muted-foreground font-mono">({data.commitSha})</span>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+              <KeyRound className="h-4 w-4" />
+              {t('systemHealth.oidc')}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center gap-2">
+              <span className={`h-2.5 w-2.5 rounded-full ${data?.oidc.configured ? 'bg-green-500' : 'bg-gray-400'}`} />
+              <span className="text-sm font-medium">
+                {data?.oidc.configured
+                  ? (data.oidc.name ?? t('systemHealth.oidcGeneric'))
+                  : t('systemHealth.oidcNotConfigured')}
+              </span>
+            </div>
+            {data?.oidc.configured && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                {[
+                  data.oidc.only && t('systemHealth.oidcOnly'),
+                  data.oidc.autoRedirect && t('systemHealth.oidcAutoRedirect'),
+                  data.oidc.rpLogout && t('systemHealth.oidcRpLogout'),
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </p>
             )}
           </CardContent>
         </Card>

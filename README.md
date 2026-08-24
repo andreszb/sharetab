@@ -126,6 +126,7 @@ ShareTab is a free, self-hosted alternative to Splitwise for tracking shared exp
 - **Dark mode** -- system-aware with manual toggle
 - **Invite links** -- share a link to add friends to your groups
 - **Magic link auth** -- passwordless email sign-in
+- **OIDC / SSO** -- sign in through any OIDC-compliant identity provider (Pocket ID, Authentik, Keycloak, Authelia, Zitadel, ...), with optional OIDC-only mode, auto-redirect, and RP-initiated logout
 - **PWA** -- installable on mobile with app-like experience
 - **Admin dashboard** -- user management, group overview, storage stats, AI usage, audit log, registration control, announcements, server logs, user impersonation, data export, expired guest split cleanup
 - **Self-hosted** -- Docker Compose deployment, designed for Unraid
@@ -286,6 +287,27 @@ AI_PROVIDER_PRIORITY="openai-codex,meridian"
 | ---------------------- | ------------------------------------------------- |
 | `GOOGLE_CLIENT_ID`     | Google OAuth client ID for "Sign in with Google". |
 | `GOOGLE_CLIENT_SECRET` | Corresponding client secret.                      |
+
+### OIDC / SSO (optional)
+
+One generic OIDC provider, configured via issuer discovery rather than a per-vendor preset. Works with any OIDC-compliant identity provider -- [Pocket ID](https://github.com/pocket-id/pocket-id), Authentik, Keycloak, Authelia, Zitadel, and others. Setting `OIDC_ISSUER`, `OIDC_CLIENT_ID`, and `OIDC_CLIENT_SECRET` enables a "Sign in with SSO" button on `/login` and `/register`; the rest are optional tuning knobs.
+
+| Variable              | Default | Description                                                                                                                                                      |
+| --------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `OIDC_ISSUER`         |         | Issuer URL, e.g. `https://auth.example.com`. ShareTab reads `${OIDC_ISSUER}/.well-known/openid-configuration` for the rest of the endpoints.                     |
+| `OIDC_CLIENT_ID`      |         | Client ID registered with the IdP.                                                                                                                               |
+| `OIDC_CLIENT_SECRET`  |         | Client secret. Leave the client's "public"/PKCE-only toggle off -- ShareTab is a confidential (server-side) client and needs a real secret.                      |
+| `OIDC_NAME`           |         | Display name for the sign-in button, e.g. `Pocket ID`. Unset renders a generic "Sign in with SSO" label.                                                         |
+| `OIDC_ALLOW_LINKING`  | `true`  | Link an OIDC sign-in onto an existing password/Google account with the same email, but only when the IdP marks that email `email_verified: true`.                |
+| `OIDC_TRUST_EMAIL`    | `false` | Treat a _missing_ `email_verified` claim as verified, for IdPs that omit the claim rather than sending `false`. Leave off unless you trust your IdP.             |
+| `OIDC_AUTO_PROVISION` | `false` | Provision new users on first OIDC sign-in even when registration is invite-only or closed, bypassing the normal registration mode.                               |
+| `OIDC_ONLY`           | `false` | Hide the password/magic-link form on `/login` and `/register`. `/login?password=1` is a permanent break-glass back to the password form.                         |
+| `OIDC_AUTO_REDIRECT`  | `false` | Skip `/login` entirely and redirect straight to the IdP. Only enable once OIDC sign-in is confirmed working for every account on the instance.                   |
+| `OIDC_RP_LOGOUT`      | `true`  | Also end the IdP's own session on sign-out (RP-initiated logout) instead of just ShareTab's local session. Requires the IdP to advertise `end_session_endpoint`. |
+
+Callback URL to register with the IdP: `${NEXTAUTH_URL}/api/auth/callback/oidc` (e.g. `https://sharetab.example.com/api/auth/callback/oidc`). Some IdPs (Pocket ID among them) match callback URLs as a literal path rather than a wildcard, so register the exact path.
+
+Roll out in two steps: ship `OIDC_ISSUER`/`OIDC_CLIENT_ID`/`OIDC_CLIENT_SECRET` first, alongside the existing password form, and confirm SSO sign-in works for every account. Only then set `OIDC_ONLY=true` and `OIDC_AUTO_REDIRECT=true` -- `/login?password=1` stays available as a fallback either way.
 
 ### Magic Link Auth (optional)
 

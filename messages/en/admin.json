@@ -3,6 +3,12 @@
   "systemHealth": {
     "title": "System Health",
     "database": "Database",
+    "oidc": "OIDC / SSO",
+    "oidcGeneric": "SSO",
+    "oidcNotConfigured": "Not configured",
+    "oidcOnly": "OIDC-only",
+    "oidcAutoRedirect": "Auto-redirect",
+    "oidcRpLogout": "RP logout",
     "version": "Version",
     "uptime": "Uptime",
     "started": "Started {time}"

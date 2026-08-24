@@ -3,6 +3,12 @@
   "systemHealth": {
     "title": "Systemhälsa",
     "database": "Databas",
+    "oidc": "OIDC/SSO",
+    "oidcGeneric": "SSO",
+    "oidcNotConfigured": "Ej konfigurerad",
+    "oidcOnly": "Endast OIDC",
+    "oidcAutoRedirect": "Automatisk omdirigering",
+    "oidcRpLogout": "RP-utloggning",
     "version": "Version",
     "uptime": "Drifttid",
     "started": "Startad {time}"

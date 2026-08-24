@@ -8,6 +8,15 @@ export async function register() {
       const { logger } = await import('@/server/lib/logger');
       logger.info('app.startup', { version, commitSha });
 
+      const { getEnabledProviders, getOidcModes } = await import('@/server/lib/auth-providers');
+      const providers = getEnabledProviders();
+      if (providers.length > 0) {
+        logger.info('app.startup.auth_providers', {
+          providers: providers.map((p) => p.id),
+          ...(providers.some((p) => p.id === 'oidc') ? { oidcModes: getOidcModes() } : {}),
+        });
+      }
+
       const { startPoller } = await import('@/server/lib/auth-health-poller');
       startPoller();
     } catch (error) {

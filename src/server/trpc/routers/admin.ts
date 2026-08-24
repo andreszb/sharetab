@@ -37,6 +37,7 @@ import {
 } from '@/server/lib/openai-codex-login';
 
 import { getBuildInfo } from '@/server/lib/build-info';
+import { getOidcConfig, getOidcModes } from '@/server/lib/auth-providers';
 
 const serverStartTime = new Date();
 const { version: cachedVersion, commitSha: cachedCommitSha } = getBuildInfo();
@@ -179,6 +180,9 @@ export const adminRouter = createTRPCRouter({
       aiStatus = 'unavailable';
     }
 
+    const oidcConfig = getOidcConfig();
+    const oidcModes = getOidcModes();
+
     return {
       dbStatus,
       aiProvider,
@@ -189,6 +193,13 @@ export const adminRouter = createTRPCRouter({
       commitSha: cachedCommitSha,
       serverStartTime: serverStartTime.toISOString(),
       uptime: Math.floor((Date.now() - serverStartTime.getTime()) / 1000),
+      oidc: {
+        configured: oidcConfig !== null,
+        name: oidcConfig?.name ?? null,
+        only: oidcModes.only,
+        autoRedirect: oidcModes.autoRedirect,
+        rpLogout: oidcModes.rpLogout,
+      },
     };
   }),
 

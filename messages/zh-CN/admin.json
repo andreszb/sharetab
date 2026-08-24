@@ -3,6 +3,12 @@
   "systemHealth": {
     "title": "系统状态",
     "database": "数据库",
+    "oidc": "OIDC / SSO",
+    "oidcGeneric": "SSO",
+    "oidcNotConfigured": "未配置",
+    "oidcOnly": "仅 OIDC",
+    "oidcAutoRedirect": "自动跳转",
+    "oidcRpLogout": "RP 注销",
     "version": "版本",
     "uptime": "运行时间",
     "started": "启动于 {time}"
