@@ -27,6 +27,14 @@ export interface SystemHealthOverride {
   version?: string;
   /** Seconds — defaults to 120 */
   uptime?: number;
+  /** Mirrors admin.getSystemHealth; defaults to an unconfigured provider */
+  oidc?: {
+    configured: boolean;
+    name: string | null;
+    only: boolean;
+    autoRedirect: boolean;
+    rpLogout: boolean;
+  };
 }
 
 export type MeridianStatus = 'healthy' | 'unhealthy' | 'degraded' | 'not_running' | 'not_applicable';
@@ -161,6 +169,7 @@ export class MockProvider {
       version: '0.0.0-test',
       serverStartTime: new Date().toISOString(),
       uptime: 120,
+      oidc: { configured: false, name: null, only: false, autoRedirect: false, rpLogout: false },
       ...overrides,
     };
     return this;
