@@ -1,11 +1,12 @@
 'use client';
 
+import { useState } from 'react';
 import { signIn } from 'next-auth/react';
 import { useTranslations } from 'next-intl';
 import { ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { trpc } from '@/lib/trpc';
-import type { ThirdPartyProvider } from '@/server/lib/auth-providers';
+import type { ThirdPartyProvider, ThirdPartyProviderId } from '@/server/lib/auth-providers';
 
 /**
  * Google's brand mark. Lucide ships no brand icons, and the alternative —
@@ -42,13 +43,31 @@ const BUTTON_CLASS =
  */
 export function ProviderButtons({ callbackUrl }: { callbackUrl: string }) {
   const t = useTranslations('auth.login');
-  const { data } = trpc.auth.getEnabledProviders.useQuery(undefined, {
+  const [pendingProvider, setPendingProvider] = useState<ThirdPartyProviderId | null>(null);
+  const { data, isPending, isError, refetch } = trpc.auth.getEnabledProviders.useQuery(undefined, {
     // Provider configuration only changes on restart, so re-fetching it on
     // every window focus is pure noise on a page the user sits on.
     staleTime: Infinity,
   });
 
-  const providers: ThirdPartyProvider[] = data?.providers ?? [];
+  // A failed query is not the same as "this instance has no third-party
+  // providers". Rendering nothing would tell the user SSO is unavailable on an
+  // instance where it is configured and merely unreachable for the moment, and
+  // leave them no way to find out otherwise — so offer an explicit retry.
+  if (isError) {
+    return (
+      <div className="space-y-2 text-center">
+        <p className="text-xs text-muted-foreground">{t('ssoError')}</p>
+        <Button type="button" variant="outline" className={BUTTON_CLASS} onClick={() => void refetch()}>
+          {t('ssoRetry')}
+        </Button>
+      </div>
+    );
+  }
+
+  if (isPending) return null;
+
+  const providers: ThirdPartyProvider[] = data.providers;
   if (providers.length === 0) return null;
 
   return (
@@ -59,14 +78,25 @@ export function ProviderButtons({ callbackUrl }: { callbackUrl: string }) {
           type="button"
           variant="outline"
           className={BUTTON_CLASS}
-          onClick={() => void signIn(provider.id, { callbackUrl })}
+          // `signIn` navigates to the IdP, so this state normally ends with the
+          // page unloading; the `catch` matters only when the redirect never
+          // happens, which would otherwise strand the button disabled.
+          disabled={pendingProvider !== null}
+          onClick={() => {
+            setPendingProvider(provider.id);
+            signIn(provider.id, { callbackUrl }).catch(() => setPendingProvider(null));
+          }}
         >
           {provider.id === 'google' ? (
             <GoogleIcon className="mr-2 h-4 w-4" />
           ) : (
             <ShieldCheck className="mr-2 h-4 w-4" />
           )}
-          {provider.name ? t('ssoButton', { provider: provider.name }) : t('ssoButtonGeneric')}
+          {pendingProvider === provider.id
+            ? t('submitting')
+            : provider.name
+              ? t('ssoButton', { provider: provider.name })
+              : t('ssoButtonGeneric')}
         </Button>
       ))}
     </>

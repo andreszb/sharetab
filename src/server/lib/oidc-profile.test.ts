@@ -25,6 +25,17 @@ describe('normalizeOidcLocale', () => {
     expect(normalizeOidcLocale('zh-Hans')).toBe('zh-CN');
   });
 
+  test('refuses to cross a script boundary to reach a base-language match', () => {
+    // `zh-CN` is Simplified; writing it into `User.locale` for a Traditional
+    // reader is a worse outcome than leaving the `en` default in place.
+    expect(normalizeOidcLocale('zh-TW')).toBeNull();
+    expect(normalizeOidcLocale('zh-Hant')).toBeNull();
+    expect(normalizeOidcLocale('zh-Hant-HK')).toBeNull();
+    expect(normalizeOidcLocale('zh_TW')).toBeNull();
+    // Region-only differences still fall back, since the script agrees.
+    expect(normalizeOidcLocale('pt-PT')).toBe('pt-BR');
+  });
+
   test('returns null rather than guessing for anything unshipped or malformed', () => {
     expect(normalizeOidcLocale('nl')).toBeNull();
     expect(normalizeOidcLocale('')).toBeNull();

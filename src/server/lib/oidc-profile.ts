@@ -37,6 +37,16 @@ function str(claim: unknown): string | null {
 }
 
 /**
+ * Subtags that rule out a base-language fallback for a given base, because
+ * they name a script ShareTab's locale for that language is not written in.
+ * `tw`/`hk`/`mo` are region subtags rather than script subtags, but they imply
+ * Traditional Chinese in every deployment that sends them.
+ */
+const SCRIPT_MISMATCH: Record<string, string[]> = {
+  zh: ['hant', 'tw', 'hk', 'mo'],
+};
+
+/**
  * Best-effort map of an OIDC `locale` claim onto a locale ShareTab actually
  * ships. Providers send BCP-47 tags that mostly do not match our list
  * verbatim: `en-US` and `en_US` both mean `en`, `pt` means `pt-BR` here
@@ -54,8 +64,16 @@ export function normalizeOidcLocale(claim: unknown): Locale | null {
   const exact = locales.find((locale) => locale.toLowerCase() === tag);
   if (exact) return exact;
 
-  const base = tag.split('-')[0];
+  const subtags = tag.split('-');
+  const base = subtags[0];
   if (!base) return null;
+
+  // Crossing a *region* on the way to a base-language match is fine — `pt-PT`
+  // reading `pt-BR` is imperfect but legible. Crossing a *script* is not:
+  // `zh-TW`/`zh-Hant` would land on `zh-CN` and write Simplified Chinese into
+  // `User.locale` for a Traditional-Chinese reader. That is the "guess" this
+  // function exists to avoid, so those return null and leave the default.
+  if (SCRIPT_MISMATCH[base]?.some((subtag) => subtags.includes(subtag))) return null;
 
   return locales.find((locale) => locale.toLowerCase().split('-')[0] === base) ?? null;
 }

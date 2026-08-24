@@ -11,9 +11,12 @@ import { checkRateLimit, parsePositiveInt } from './lib/rate-limit';
 import { getClientIp, FALLBACK_IP } from './lib/client-ip';
 import { buildOidcProvider, getGoogleConfig, getOidcConfig } from './lib/auth-providers';
 
-// Resolved once at module load and shared with the `auth.getEnabledProviders`
-// tRPC query, so the login page never renders a button for a provider that
-// was not registered here.
+// Resolved once at module load. The `auth.getEnabledProviders` tRPC query the
+// login page reads its buttons from calls the same `auth-providers.ts` helpers
+// rather than reusing these values, so the two agree only because both derive
+// from the same env — which is fixed for the lifetime of the process. Anything
+// that mutated `process.env` after this point would render a button for a
+// provider NextAuth never registered.
 const googleConfig = getGoogleConfig();
 const oidcConfig = getOidcConfig();
 
