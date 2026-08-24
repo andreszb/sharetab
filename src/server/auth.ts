@@ -9,6 +9,18 @@ import { db } from './db';
 import { logger } from './lib/logger';
 import { checkRateLimit, parsePositiveInt } from './lib/rate-limit';
 import { getClientIp, FALLBACK_IP } from './lib/client-ip';
+import { buildOidcProvider, getGoogleConfig, getOidcConfig } from './lib/auth-providers';
+
+// Resolved once at module load. The `auth.getEnabledProviders` tRPC query the
+// login page reads its buttons from calls the same `auth-providers.ts` helpers
+// rather than reusing these values, so the two agree only because both derive
+// from the same env — which is fixed for the lifetime of the process. Anything
+// that mutated `process.env` after this point would render a button for a
+// provider NextAuth never registered.
+const googleConfig = getGoogleConfig();
+const oidcConfig = getOidcConfig();
+
+const oidcProvider = oidcConfig ? buildOidcProvider(oidcConfig) : null;
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -86,11 +98,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     // TS attributes the diagnostic to this first spread element in the providers
     // array literal; see also the (related but not identical) upstream discussion
     // in nextauthjs/next-auth#9883 / #9890.
-    ...(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
+    ...(googleConfig
       ? [
           Google({
-            clientId: process.env.GOOGLE_CLIENT_ID,
-            clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+            clientId: googleConfig.clientId,
+            clientSecret: googleConfig.clientSecret,
           }),
         ]
       : []),
@@ -111,6 +123,21 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           }),
         ]
       : []),
+    // Generic OIDC provider. Everything vendor-specific comes from the
+    // issuer's discovery document, so one code path covers Pocket ID,
+    // Authentik, Keycloak, Authelia and Zitadel without per-vendor branches.
+    //
+    // Account-linking and provisioning policy is deliberately not here yet.
+    // Without `allowDangerousEmailAccountLinking`, a first sign-in whose email
+    // already belongs to a password account is refused by NextAuth with
+    // `OAuthAccountNotLinked` — the safe default to ship before the policy
+    // that decides when linking is allowed.
+    // @ts-expect-error -- the same upstream NodemailerConfig["server"] typing
+    // issue described above. TS raises it against the providers array union and
+    // pins it to one spread element at a time, so adding a third spread moved
+    // it here; the suppression has to travel with it. The provider object
+    // itself is typed as OIDCConfig above, outside this suppression.
+    ...(oidcProvider ? [oidcProvider] : []),
   ],
   callbacks: {
     async jwt({ token, user }) {
