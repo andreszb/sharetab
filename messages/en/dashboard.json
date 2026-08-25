@@ -16,5 +16,5 @@
   "members": "{count, plural, one {# member} other {# members}}",
   "archivedGroups": "{count, plural, one {# archived group} other {# archived groups}}",
   "mixedCurrencies": "Mixed currencies",
-  "mixedCurrenciesDebts": "Your groups use different currencies, so combined balances can't be shown. Open a group to see its balance."
+  "approximateRates": "Approximate — a currency rate was unavailable."
 }

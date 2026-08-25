@@ -77,6 +77,8 @@ model User {
   systemInvitesUsed SystemInvite[] @relation("SystemInviteUsedBy")
   uploadedReceipts Receipt[] @relation("UploadedReceipts")
   guestSplits      GuestSplit[] @relation("GuestSplits")
+  friendshipsSent     Friendship[] @relation("FriendshipRequester")
+  friendshipsReceived Friendship[] @relation("FriendshipAddressee")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -141,11 +143,51 @@ enum GroupRole {
   MEMBER
 }
 
+// ─── FRIENDS ───────────────────────────────────────────────
+
+// A deliberately-added friend relationship.
+//
+// Rows exist ONLY for explicit adds: someone added by email, or a placeholder
+// person created for a direct expense. Friends you merely share history with
+// (group co-members, co-participants on a non-group expense) are derived at
+// query time and intentionally have no row — that avoids a backfill, avoids
+// writing a row on every expense, and leaves one source of truth.
+//
+// The relationship is one-sided until accepted: the requester can log expenses
+// against the addressee immediately, while the addressee sees only a pending
+// invite with no amounts. REJECTED does not stop the requester from continuing
+// to log — resending simply sets the status back to PENDING. A friendship whose
+// addressee is a placeholder user starts ACCEPTED; there is nobody to accept it.
+model Friendship {
+  id          String           @id @default(cuid())
+  requesterId String
+  addresseeId String
+  status      FriendshipStatus @default(PENDING)
+  respondedAt DateTime?
+
+  requester User @relation("FriendshipRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  addressee User @relation("FriendshipAddressee", fields: [addresseeId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([requesterId, addresseeId])
+  @@index([addresseeId, status])
+}
+
+enum FriendshipStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
 // ─── EXPENSES ──────────────────────────────────────────────
 
 model Expense {
   id          String    @id @default(cuid())
-  groupId     String
+  // Nullable: an expense with no group is a direct ("Friends") expense between
+  // people who never created a group. See the Friendship model.
+  groupId     String?
   title       String
   description String?   @db.Text
   amount      Int       // total in cents (in expense currency)
@@ -159,7 +201,7 @@ model Expense {
   addedById   String
   receiptId   String?   @unique
 
-  group  Group          @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  group  Group?         @relation(fields: [groupId], references: [id], onDelete: Cascade)
   paidBy User           @relation("PaidBy", fields: [paidById], references: [id])
   addedBy User          @relation("AddedBy", fields: [addedById], references: [id])
   shares ExpenseShare[]
@@ -264,7 +306,8 @@ enum ReceiptStatus {
 
 model Settlement {
   id       String  @id @default(cuid())
-  groupId  String
+  // Nullable: mirrors Expense.groupId — settles a direct, non-group balance.
+  groupId  String?
   fromId   String
   toId     String
   amount   Int     // cents (in settlement currency)
@@ -273,7 +316,7 @@ model Settlement {
   baseCurrencyAmount  Int?    // amount converted to group currency (cents); null = same currency
   note     String?
 
-  group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  group Group? @relation(fields: [groupId], references: [id], onDelete: Cascade)
   from  User  @relation("SettledBy", fields: [fromId], references: [id])
   to    User  @relation("SettledFor", fields: [toId], references: [id])
 
@@ -289,7 +332,9 @@ model Settlement {
 
 model ActivityLog {
   id       String       @id @default(cuid())
-  groupId  String
+  // Nullable: non-group expenses and settlements write into this same unified
+  // feed, so an entry need not belong to any group.
+  groupId  String?
   userId   String?
   type     ActivityType
   // Polymorphic reference: entityId may point to an Expense, Settlement, or other entity
@@ -298,7 +343,7 @@ model ActivityLog {
   entityId String?
   metadata Json?
 
-  group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  group Group? @relation(fields: [groupId], references: [id], onDelete: Cascade)
   user  User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   createdAt DateTime @default(now())

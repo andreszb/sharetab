@@ -64,7 +64,7 @@ export function ActivityFeedSection() {
                           <Badge variant="outline">{TYPE_LABELS[item.type] ?? item.type}</Badge>
                         </td>
                         <td className="px-4 py-3 text-muted-foreground">{item.userName}</td>
-                        <td className="px-4 py-3 text-muted-foreground">{item.groupName}</td>
+                        <td className="px-4 py-3 text-muted-foreground">{item.groupName ?? '—'}</td>
                         <td className="px-4 py-3 text-muted-foreground">{new Date(item.createdAt).toLocaleString()}</td>
                       </tr>
                     ))}
