@@ -1,5 +1,11 @@
 import { describe, test, expect } from 'vitest';
-import { computePairwiseBalances, type PairwiseExpense, type PairwiseSettlement } from './pairwise-balance-calculator';
+import {
+  computePairwiseBalances,
+  attributeExpense,
+  attributeSettlement,
+  type PairwiseExpense,
+  type PairwiseSettlement,
+} from './pairwise-balance-calculator';
 import { computeBalances, simplifyDebts } from './balance-calculator';
 
 // Helper: an equal split of `total` across `userIds`, paid by `paidById`.
@@ -311,5 +317,91 @@ describe('computePairwiseBalances — the two sides of a pair always agree', () 
         { fromId: 'dora', toId: 'carl', amount: 4000, baseCurrencyAmount: 4321, displayRate: 1.33 },
       ],
     );
+  });
+});
+
+// ── per-row attribution ───────────────────────────────────────────────────
+//
+// The ledger view shows one number per row and the balance is the sum of those
+// numbers, so both must come from the same function.
+
+describe('attributeExpense', () => {
+  test('credits the payer against every other participant', () => {
+    const deltas = attributeExpense('alice', {
+      paidById: 'alice',
+      amount: 3000,
+      shares: [
+        { userId: 'alice', amount: 1000 },
+        { userId: 'bob', amount: 1000 },
+        { userId: 'carol', amount: 1000 },
+      ],
+    });
+    expect([...deltas]).toEqual([
+      ['bob', 1000],
+      ['carol', 1000],
+    ]);
+  });
+
+  test('debits the viewer against the payer when someone else paid', () => {
+    const deltas = attributeExpense('bob', {
+      paidById: 'alice',
+      amount: 3000,
+      shares: [
+        { userId: 'alice', amount: 1000 },
+        { userId: 'bob', amount: 1000 },
+        { userId: 'carol', amount: 1000 },
+      ],
+    });
+    // Only against alice. Carol's share is none of bob's business.
+    expect([...deltas]).toEqual([['alice', -1000]]);
+  });
+
+  test('contributes nothing when the viewer was not involved', () => {
+    const deltas = attributeExpense('dave', {
+      paidById: 'alice',
+      amount: 2000,
+      shares: [
+        { userId: 'alice', amount: 1000 },
+        { userId: 'bob', amount: 1000 },
+      ],
+    });
+    expect(deltas.size).toBe(0);
+  });
+
+  test('the sum of the rows equals the folded balance', () => {
+    const expenses = [
+      {
+        paidById: 'alice',
+        amount: 2000,
+        shares: [
+          { userId: 'alice', amount: 1000 },
+          { userId: 'bob', amount: 1000 },
+        ],
+      },
+      {
+        paidById: 'bob',
+        amount: 600,
+        shares: [
+          { userId: 'alice', amount: 300 },
+          { userId: 'bob', amount: 300 },
+        ],
+      },
+    ];
+    const rowSum = expenses.reduce((total, e) => total + (attributeExpense('alice', e).get('bob') ?? 0), 0);
+    expect(rowSum).toBe(computePairwiseBalances('alice', expenses, [])[0]?.net);
+  });
+});
+
+describe('attributeSettlement', () => {
+  test('paying a friend increases what they owe', () => {
+    expect([...attributeSettlement('alice', { fromId: 'alice', toId: 'bob', amount: 500 })]).toEqual([['bob', 500]]);
+  });
+
+  test('being paid decreases what they owe', () => {
+    expect([...attributeSettlement('alice', { fromId: 'bob', toId: 'alice', amount: 500 })]).toEqual([['bob', -500]]);
+  });
+
+  test('a settlement between two other people contributes nothing', () => {
+    expect(attributeSettlement('alice', { fromId: 'bob', toId: 'carol', amount: 500 }).size).toBe(0);
   });
 });

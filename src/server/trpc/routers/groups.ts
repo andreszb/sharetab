@@ -632,10 +632,24 @@ async function mergePlaceholderIntoUser(
       },
     });
 
-    const remainingMemberships = await tx.groupMember.count({
-      where: { userId: placeholderUserId },
-    });
-    if (remainingMemberships === 0) {
+    // This helper is group-scoped: everything above only rewrote rows carrying
+    // this groupId. A placeholder can also hold rows that no group owns — a
+    // direct expense, or the friendship that made it reachable in the first
+    // place — and deleting the user out from under those would fail on the
+    // foreign keys. Only reclaim the row once genuinely nothing points at it.
+    const [memberships, shareCount, expensesPaid, expensesAdded, settlementCount, friendships] = await Promise.all([
+      tx.groupMember.count({ where: { userId: placeholderUserId } }),
+      tx.expenseShare.count({ where: { userId: placeholderUserId } }),
+      tx.expense.count({ where: { paidById: placeholderUserId } }),
+      tx.expense.count({ where: { addedById: placeholderUserId } }),
+      tx.settlement.count({ where: { OR: [{ fromId: placeholderUserId }, { toId: placeholderUserId }] } }),
+      tx.friendship.count({
+        where: { OR: [{ requesterId: placeholderUserId }, { addresseeId: placeholderUserId }] },
+      }),
+    ]);
+
+    const stillReferenced = memberships + shareCount + expensesPaid + expensesAdded + settlementCount + friendships > 0;
+    if (!stillReferenced) {
       await tx.user.delete({ where: { id: placeholderUserId } });
     }
   });
