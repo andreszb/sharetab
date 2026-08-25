@@ -7,6 +7,7 @@ import { MAX_MONEY_CENTS } from '@/lib/money';
 import { stripUndefined } from '../../lib/strip-undefined';
 import { assertDirectParticipants } from '../../lib/friend-connections';
 import { participates } from '../../lib/friend-queries';
+import { assertReceiptUsableInScope } from '../../lib/receipt-scope';
 
 const expenseShareSchema = z.object({
   userId: z.string(),
@@ -15,9 +16,14 @@ const expenseShareSchema = z.object({
   percentage: z.number().int().optional(),
 });
 
+// The upper bound is not a product limit so much as a query bound: on the
+// direct path this array reaches Prisma (via `assertDirectParticipants`)
+// before the shares-sum check runs, so an unbounded array is an unbounded
+// query. 200 is far above any real split and matches the receipt caps.
 const expenseSharesArraySchema = z
   .array(expenseShareSchema)
   .min(1)
+  .max(200)
   .refine((shares) => new Set(shares.map((s) => s.userId)).size === shares.length, {
     message: 'Duplicate user in shares',
   });
@@ -151,6 +157,22 @@ export const expensesRouter = createTRPCRouter({
         // Outside a group there is no membership to check against, so the
         // participant set is validated against who the viewer is connected to.
         await assertDirectParticipants(ctx.db, ctx.user.id, [input.paidById, ...shareUserIds]);
+      }
+
+      // A receipt may only be attached from the scope it already belongs to.
+      // `Expense.receiptId` is unique, so an unchecked id here is both a read
+      // leak (`get` includes the receipt) and a permanent denial for the group
+      // that owns it. The direct scope removed the last incidental barrier:
+      // a self-only expense needs no connection to anyone.
+      if (input.receiptId !== undefined) {
+        const receipt = await ctx.db.receipt.findUnique({
+          where: { id: input.receiptId },
+          select: { groupId: true, uploadedById: true },
+        });
+        if (!receipt) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: 'Receipt not found' });
+        }
+        assertReceiptUsableInScope(receipt, scopeGroupId(scope), ctx.user.id);
       }
 
       // Validate shares sum equals total (in expense's original currency)

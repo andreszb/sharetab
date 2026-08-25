@@ -16,6 +16,13 @@ const BASE = process.env.BASE_URL || 'http://localhost:3001';
 const PASSWORD = 'password123';
 const AI_TIMEOUT = 120_000;
 
+// These tests build on one another — a later one reads the balance or feed
+// entry an earlier one wrote. The config's `fullyParallel` would otherwise
+// spread them across workers, and since `emails` is randomised per module
+// load, each worker would register a *different* Ana and Ben and then assert
+// against the wrong one.
+test.describe.configure({ mode: 'serial' });
+
 /**
  * Register a throwaway account through the API and sign in as it.
  *

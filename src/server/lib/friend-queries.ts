@@ -65,10 +65,19 @@ export function groupCoMembers(viewerId: string) {
  * counterparty at a time would be N queries, but reading every direct expense
  * the viewer has ever been in is an unbounded scan on a write path — this asks
  * only for the rows that could possibly connect somebody in the list.
+ *
+ * Written as two `in` lists rather than an `OR` of per-id `participatesInExpense`
+ * fragments: both say "somebody in `otherIds` took part", but the `OR` spelling
+ * compiles to one correlated subquery *per id*, so a caller with a long
+ * participant list turns a write into an N-subquery scan. The shape here is
+ * constant no matter how long the list is.
  */
 export function sharedNonGroupExpenseWithAny(viewerId: string, otherIds: string[]) {
   return {
     groupId: null,
-    AND: [participatesInExpense(viewerId), { OR: otherIds.map((id) => participatesInExpense(id)) }],
+    AND: [
+      participatesInExpense(viewerId),
+      { OR: [{ paidById: { in: otherIds } }, { shares: { some: { userId: { in: otherIds } } } }] },
+    ],
   };
 }

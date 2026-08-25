@@ -4,6 +4,7 @@ import { Prisma } from '@/generated/prisma/client';
 import type { PrismaClient } from '@/generated/prisma/client';
 import { createTRPCRouter, protectedProcedure, ledgerScopeProcedure, scopeGroupId } from '../init';
 import { assertDirectConnections, assertDirectParticipants } from '../../lib/friend-connections';
+import { assertReceiptUsableInScope } from '../../lib/receipt-scope';
 import { processReceiptImage } from '../../lib/receipt-processor';
 import { logger } from '../../lib/logger';
 import { parseExtractedData } from '../../lib/json-schemas';
@@ -72,6 +73,11 @@ export const receiptsRouter = createTRPCRouter({
         throw new TRPCError({ code: 'NOT_FOUND', message: 'Receipt not found' });
       }
 
+      // A groupId here does not merely scope the scan — the claim below writes
+      // it onto the receipt. So the caller must belong to the target group, and
+      // the receipt must not already belong to a different one: `saveForLater`
+      // refuses that move for the same reason, and refusing it in only one of
+      // the two places leaves the receipt reachable from the other.
       if (input.groupId) {
         const membership = await ctx.db.groupMember.findUnique({
           where: {
@@ -84,6 +90,7 @@ export const receiptsRouter = createTRPCRouter({
         if (!membership) {
           throw new TRPCError({ code: 'FORBIDDEN', message: 'Not a member of this group' });
         }
+        assertReceiptUsableInScope(receipt, input.groupId, ctx.user.id);
       }
 
       // Note: old items are NOT deleted here — processReceiptImage handles
@@ -434,19 +441,9 @@ export const receiptsRouter = createTRPCRouter({
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'Receipt not ready' });
       }
 
-      // Verify the caller has access to this receipt
-      if (receipt.groupId) {
-        // If already assigned to a group, it must match the target group — and a
-        // direct expense has no group, so a grouped receipt cannot feed one.
-        if (receipt.groupId !== groupId) {
-          throw new TRPCError({ code: 'FORBIDDEN', message: 'Receipt belongs to a different group' });
-        }
-      } else {
-        // Ungrouped receipt: only the uploader can use it
-        if (receipt.uploadedById !== ctx.user.id) {
-          throw new TRPCError({ code: 'FORBIDDEN' });
-        }
-      }
+      // Verify the caller has access to this receipt, in the same terms
+      // `expenses.create` uses for a receipt handed to it directly.
+      assertReceiptUsableInScope(receipt, groupId, ctx.user.id);
 
       const extractedData = parseExtractedData(receipt.extractedData);
 
@@ -637,6 +634,27 @@ export const receiptsRouter = createTRPCRouter({
       await verifyReceiptAccess(ctx.db, input.receiptId, ctx.user.id);
       const scope = ctx.scope;
 
+      const userIdsToValidate = new Set<string>();
+      if (input.paidById) {
+        userIdsToValidate.add(input.paidById);
+      }
+      for (const assignment of input.assignments ?? []) {
+        for (const userId of assignment.userIds) {
+          userIdsToValidate.add(userId);
+        }
+      }
+
+      // Connection only: a half-assigned receipt need not name the viewer
+      // yet. assignItemsAndCreateExpense applies the full rule.
+      //
+      // Deliberately outside the transaction below: `loadConnections` issues
+      // its own reads on the base client, and holding an interactive
+      // transaction open across them turns pool contention into a P2024
+      // rather than the domain error the caller can act on.
+      if (scope.kind === 'direct' && userIdsToValidate.size > 0) {
+        await assertDirectConnections(ctx.db, ctx.user.id, Array.from(userIdsToValidate));
+      }
+
       await ctx.db.$transaction(async (tx) => {
         const receipt = await tx.receipt.findUnique({
           where: { id: input.receiptId },
@@ -644,10 +662,13 @@ export const receiptsRouter = createTRPCRouter({
         if (!receipt || receipt.status !== 'COMPLETED') {
           throw new TRPCError({ code: 'BAD_REQUEST', message: 'Receipt must be processed first' });
         }
-        // Saving with no group would otherwise detach a receipt that already
-        // belongs to one, taking it out of that group for every member.
-        if (scope.kind === 'direct' && receipt.groupId) {
-          throw new TRPCError({ code: 'FORBIDDEN', message: 'Receipt belongs to a group' });
+        // Saving into any scope other than the one the receipt already belongs
+        // to would take it out of that group for every member — whether that
+        // means detaching it entirely (direct scope) or moving it to a second
+        // group the caller also happens to be in. An unassigned receipt still
+        // adopts the scope it is saved into.
+        if (receipt.groupId && receipt.groupId !== scopeGroupId(scope)) {
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'Receipt belongs to a different group' });
         }
         // Check it's not already linked to an expense
         const existing = await tx.expense.findUnique({
@@ -657,38 +678,23 @@ export const receiptsRouter = createTRPCRouter({
           throw new TRPCError({ code: 'BAD_REQUEST', message: 'Receipt already has an expense' });
         }
 
-        const userIdsToValidate = new Set<string>();
-        if (input.paidById) {
-          userIdsToValidate.add(input.paidById);
-        }
-        for (const assignment of input.assignments ?? []) {
-          for (const userId of assignment.userIds) {
-            userIdsToValidate.add(userId);
-          }
-        }
-
-        if (userIdsToValidate.size > 0) {
-          if (scope.kind === 'group') {
-            const validMembers = await tx.groupMember.findMany({
-              where: {
-                groupId: scope.groupId,
-                userId: { in: Array.from(userIdsToValidate) },
-              },
-              select: { userId: true },
-            });
-            const validMemberIds = new Set(validMembers.map((member) => member.userId));
-            for (const userId of userIdsToValidate) {
-              if (!validMemberIds.has(userId)) {
-                throw new TRPCError({
-                  code: 'BAD_REQUEST',
-                  message: `User ${userId} is not a member of this group`,
-                });
-              }
+        // The direct half of this check ran before the transaction opened.
+        if (userIdsToValidate.size > 0 && scope.kind === 'group') {
+          const validMembers = await tx.groupMember.findMany({
+            where: {
+              groupId: scope.groupId,
+              userId: { in: Array.from(userIdsToValidate) },
+            },
+            select: { userId: true },
+          });
+          const validMemberIds = new Set(validMembers.map((member) => member.userId));
+          for (const userId of userIdsToValidate) {
+            if (!validMemberIds.has(userId)) {
+              throw new TRPCError({
+                code: 'BAD_REQUEST',
+                message: `User ${userId} is not a member of this group`,
+              });
             }
-          } else {
-            // Connection only: a half-assigned receipt need not name the viewer
-            // yet. assignItemsAndCreateExpense applies the full rule.
-            await assertDirectConnections(ctx.db, ctx.user.id, Array.from(userIdsToValidate));
           }
         }
 

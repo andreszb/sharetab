@@ -2,6 +2,13 @@ import { z } from 'zod';
 import { createTRPCRouter, groupMemberProcedure, protectedProcedure } from '../init';
 import { participatesInExpense } from '../../lib/friend-queries';
 
+/**
+ * How many of the viewer's direct expenses and settlements the unified feed
+ * considers when resolving `ActivityLog.entityId`. Well above the 50-row cap
+ * on the feed itself, so the bound is invisible in practice.
+ */
+const DIRECT_ENTITY_LOOKBACK = 500;
+
 export const activityRouter = createTRPCRouter({
   getGroupActivity: groupMemberProcedure
     .input(
@@ -47,6 +54,13 @@ export const activityRouter = createTRPCRouter({
    * `EXPENSE_DELETED` entry for a direct expense only reaches the person who
    * deleted it, since the row its `entityId` points at is gone by then. The
    * `userId` arm is what keeps their own deletions visible to them.
+   *
+   * The id lookups are capped at `DIRECT_ENTITY_LOOKBACK`, most-recent first:
+   * the feed itself returns at most 50 rows, so pulling a lifetime of direct
+   * ids to filter it grows the query without changing the answer, and at the
+   * extreme overruns the bind-parameter limit. The cost is that somebody with
+   * more direct rows than the cap stops seeing feed entries for their oldest
+   * ones — which are far below the fold of a 50-row feed regardless.
    */
   getRecentActivity: protectedProcedure
     .input(z.object({ limit: z.number().int().min(1).max(50).default(10) }))
@@ -59,10 +73,16 @@ export const activityRouter = createTRPCRouter({
         ctx.db.expense.findMany({
           where: { groupId: null, ...participatesInExpense(ctx.user.id) },
           select: { id: true },
+          // `updatedAt`, not `createdAt`: an edit to an old expense writes a
+          // fresh entry, and ordering by the edit keeps that entry reachable.
+          orderBy: { updatedAt: 'desc' },
+          take: DIRECT_ENTITY_LOOKBACK,
         }),
         ctx.db.settlement.findMany({
           where: { groupId: null, OR: [{ fromId: ctx.user.id }, { toId: ctx.user.id }] },
           select: { id: true },
+          orderBy: { settledAt: 'desc' },
+          take: DIRECT_ENTITY_LOOKBACK,
         }),
       ]);
 
