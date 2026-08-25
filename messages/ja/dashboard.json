@@ -15,6 +15,5 @@
   "showMore": "もっと見る",
   "members": "{count, plural, other {#人のメンバー}}",
   "archivedGroups": "{count, plural, other {#件のアーカイブ済みグループ}}",
-  "mixedCurrencies": "複数の通貨",
   "approximateRates": "概算です。為替レートを取得できませんでした。"
 }

@@ -15,6 +15,5 @@
   "showMore": "Mostrar mais",
   "members": "{count, plural, one {# membro} other {# membros}}",
   "archivedGroups": "{count, plural, one {# grupo arquivado} other {# grupos arquivados}}",
-  "mixedCurrencies": "Várias moedas",
   "approximateRates": "Aproximado — uma taxa de câmbio não estava disponível."
 }

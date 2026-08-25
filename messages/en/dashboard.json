@@ -15,6 +15,5 @@
   "showMore": "Show more",
   "members": "{count, plural, one {# member} other {# members}}",
   "archivedGroups": "{count, plural, one {# archived group} other {# archived groups}}",
-  "mixedCurrencies": "Mixed currencies",
   "approximateRates": "Approximate — a currency rate was unavailable."
 }

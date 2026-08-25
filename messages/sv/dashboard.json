@@ -15,6 +15,5 @@
   "showMore": "Visa mer",
   "members": "{count, plural, one {# medlem} other {# medlemmar}}",
   "archivedGroups": "{count, plural, one {# arkiverad grupp} other {# arkiverade grupper}}",
-  "mixedCurrencies": "Blandade valutor",
   "approximateRates": "Ungefärligt – en valutakurs kunde inte hämtas."
 }

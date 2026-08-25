@@ -15,6 +15,5 @@
   "showMore": "더 보기",
   "members": "{count, plural, other {#명}}",
   "archivedGroups": "{count, plural, other {보관된 그룹 #개}}",
-  "mixedCurrencies": "여러 통화",
   "approximateRates": "대략적인 금액입니다. 환율을 가져오지 못했습니다."
 }
