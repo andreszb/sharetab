@@ -6,6 +6,7 @@
     "oidc": "OIDC / SSO",
     "oidcGeneric": "SSO",
     "oidcNotConfigured": "Não configurado",
+    "oidcDiscoveryUnreachable": "Emissor inacessível",
     "oidcOnly": "Somente OIDC",
     "oidcAutoRedirect": "Redirecionamento automático",
     "oidcRpLogout": "Logout RP",

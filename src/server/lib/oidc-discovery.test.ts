@@ -1,5 +1,5 @@
 import { describe, test, expect, vi, afterEach } from 'vitest';
-import { fetchOidcEndSessionEndpoint } from './oidc-discovery';
+import { fetchOidcEndSessionEndpoint, isOidcDiscoveryReachable } from './oidc-discovery';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -79,5 +79,33 @@ describe('fetchOidcEndSessionEndpoint', () => {
       vi.fn().mockRejectedValueOnce(new DOMException('The operation was aborted', 'TimeoutError')),
     );
     expect(await fetchOidcEndSessionEndpoint('https://auth.example.com')).toBeNull();
+  });
+});
+
+describe('isOidcDiscoveryReachable', () => {
+  test('returns true when the issuer serves a well-formed discovery document', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ issuer: 'https://auth.example.com' }) }),
+    );
+    expect(await isOidcDiscoveryReachable('https://auth.example.com')).toBe(true);
+  });
+
+  test('returns false on a non-ok response', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({ ok: false, json: () => Promise.resolve({}) }));
+    expect(await isOidcDiscoveryReachable('https://auth.example.com')).toBe(false);
+  });
+
+  test('returns false rather than throwing on a network failure', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValueOnce(new Error('ECONNREFUSED')));
+    expect(await isOidcDiscoveryReachable('https://auth.example.com')).toBe(false);
+  });
+
+  test('returns false rather than throwing on malformed JSON', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValueOnce({ ok: true, json: () => Promise.reject(new Error('bad json')) }),
+    );
+    expect(await isOidcDiscoveryReachable('https://auth.example.com')).toBe(false);
   });
 });

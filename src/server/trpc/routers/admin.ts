@@ -38,6 +38,7 @@ import {
 
 import { getBuildInfo } from '@/server/lib/build-info';
 import { getOidcConfig, getOidcModes } from '@/server/lib/auth-providers';
+import { isOidcDiscoveryReachable } from '@/server/lib/oidc-discovery';
 
 const serverStartTime = new Date();
 const { version: cachedVersion, commitSha: cachedCommitSha } = getBuildInfo();
@@ -182,6 +183,9 @@ export const adminRouter = createTRPCRouter({
 
     const oidcConfig = getOidcConfig();
     const oidcModes = getOidcModes();
+    // `null` when OIDC isn't configured at all — distinct from `false`, which
+    // means it's configured but the issuer didn't answer.
+    const oidcDiscoveryReachable = oidcConfig ? await isOidcDiscoveryReachable(oidcConfig.issuer) : null;
 
     return {
       dbStatus,
@@ -199,6 +203,7 @@ export const adminRouter = createTRPCRouter({
         only: oidcModes.only,
         autoRedirect: oidcModes.autoRedirect,
         rpLogout: oidcModes.rpLogout,
+        discoveryReachable: oidcDiscoveryReachable,
       },
     };
   }),

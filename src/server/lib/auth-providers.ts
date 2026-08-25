@@ -40,13 +40,38 @@ export interface OidcConfig {
 
 type Env = Record<string, string | undefined>;
 
+/** `<from Pocket ID>`, `<your-client-secret>` — template placeholder syntax copied verbatim from docs. */
+function isPlaceholder(value: string): boolean {
+  return /^<.*>$/.test(value);
+}
+
 /**
  * Treat whitespace-only and empty values as unset: `OIDC_ISSUER=` in a compose
- * file or an EnvironmentFile arrives as `''`, not `undefined`.
+ * file or an EnvironmentFile arrives as `''`, not `undefined`. Also treat an
+ * unresolved `<...>` placeholder as unset — it passes the non-empty bar but
+ * is never a real value, and registering a provider on it fails opaquely at
+ * token exchange (`invalid_client`) instead of the button just not appearing.
  */
 function read(env: Env, key: string): string | undefined {
   const trimmed = env[key]?.trim();
-  return trimmed ? trimmed : undefined;
+  if (!trimmed || isPlaceholder(trimmed)) return undefined;
+  return trimmed;
+}
+
+const OIDC_ENV_VARS = ['OIDC_ISSUER', 'OIDC_CLIENT_ID', 'OIDC_CLIENT_SECRET', 'OIDC_NAME'] as const;
+
+/**
+ * `OIDC_*` vars whose raw value is still `<...>` placeholder syntax. `read()`
+ * already treats these as unset, so no provider gets registered on them —
+ * but that alone is indistinguishable from OIDC never having been touched.
+ * This is what lets the startup log tell the two apart and name the exact
+ * var, rather than the person hunting through four env vars for the typo.
+ */
+export function getOidcPlaceholderWarnings(env: Env = process.env): string[] {
+  return OIDC_ENV_VARS.filter((key) => {
+    const raw = env[key]?.trim();
+    return !!raw && isPlaceholder(raw);
+  });
 }
 
 export function getGoogleConfig(env: Env = process.env): GoogleConfig | null {

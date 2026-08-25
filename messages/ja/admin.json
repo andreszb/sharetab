@@ -6,6 +6,7 @@
     "oidc": "OIDC / SSO",
     "oidcGeneric": "SSO",
     "oidcNotConfigured": "未設定",
+    "oidcDiscoveryUnreachable": "発行者に到達できません",
     "oidcOnly": "OIDCのみ",
     "oidcAutoRedirect": "自動リダイレクト",
     "oidcRpLogout": "RPログアウト",

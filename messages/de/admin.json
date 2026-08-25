@@ -6,6 +6,7 @@
     "oidc": "OIDC / SSO",
     "oidcGeneric": "SSO",
     "oidcNotConfigured": "Nicht konfiguriert",
+    "oidcDiscoveryUnreachable": "Aussteller nicht erreichbar",
     "oidcOnly": "Nur OIDC",
     "oidcAutoRedirect": "Automatische Weiterleitung",
     "oidcRpLogout": "RP-Abmeldung",

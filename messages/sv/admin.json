@@ -6,6 +6,7 @@
     "oidc": "OIDC/SSO",
     "oidcGeneric": "SSO",
     "oidcNotConfigured": "Ej konfigurerad",
+    "oidcDiscoveryUnreachable": "Utfärdaren är oåtkomlig",
     "oidcOnly": "Endast OIDC",
     "oidcAutoRedirect": "Automatisk omdirigering",
     "oidcRpLogout": "RP-utloggning",

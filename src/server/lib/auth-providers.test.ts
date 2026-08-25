@@ -1,5 +1,12 @@
 import { describe, test, expect } from 'vitest';
-import { buildOidcProvider, getEnabledProviders, getGoogleConfig, getOidcConfig, getOidcModes } from './auth-providers';
+import {
+  buildOidcProvider,
+  getEnabledProviders,
+  getGoogleConfig,
+  getOidcConfig,
+  getOidcModes,
+  getOidcPlaceholderWarnings,
+} from './auth-providers';
 
 const oidcEnv = {
   OIDC_ISSUER: 'https://auth.example.com',
@@ -51,6 +58,39 @@ describe('getOidcConfig', () => {
 
   test('name is carried through when OIDC_NAME is set', () => {
     expect(getOidcConfig({ ...oidcEnv, OIDC_NAME: 'Pocket ID' })?.name).toBe('Pocket ID');
+  });
+
+  // Regression: OIDC_CLIENT_SECRET=<from Pocket ID> copied verbatim from docs
+  // is non-empty, so it used to register a provider that died at token
+  // exchange with an opaque invalid_client instead of the button not
+  // appearing at all.
+  test('treats an unresolved <...> placeholder as unset', () => {
+    expect(getOidcConfig({ ...oidcEnv, OIDC_CLIENT_SECRET: '<from Pocket ID>' })).toBeNull();
+    expect(getOidcConfig({ ...oidcEnv, OIDC_ISSUER: '<your issuer URL>' })).toBeNull();
+  });
+
+  test('does not mistake a value that merely contains angle brackets for a placeholder', () => {
+    expect(getOidcConfig({ ...oidcEnv, OIDC_CLIENT_SECRET: 'a<b>c-secret' })?.clientSecret).toBe('a<b>c-secret');
+  });
+});
+
+describe('getOidcPlaceholderWarnings', () => {
+  test('is empty when nothing is set', () => {
+    expect(getOidcPlaceholderWarnings({})).toEqual([]);
+  });
+
+  test('is empty when every OIDC var is a real value', () => {
+    expect(getOidcPlaceholderWarnings(oidcEnv)).toEqual([]);
+  });
+
+  test('names each var still holding <...> placeholder syntax', () => {
+    expect(
+      getOidcPlaceholderWarnings({
+        ...oidcEnv,
+        OIDC_CLIENT_SECRET: '<from Pocket ID>',
+        OIDC_NAME: '<display name>',
+      }),
+    ).toEqual(['OIDC_CLIENT_SECRET', 'OIDC_NAME']);
   });
 });
 

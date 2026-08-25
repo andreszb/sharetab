@@ -14,13 +14,18 @@ export async function register() {
       // client — resolves to no provider at all. Suppressing the line there
       // would make a misconfigured instance look exactly like a deliberately
       // password-only one.
-      const { getEnabledProviders, getOidcModes } = await import('@/server/lib/auth-providers');
+      const { getEnabledProviders, getOidcModes, getOidcPlaceholderWarnings } =
+        await import('@/server/lib/auth-providers');
       const providers = getEnabledProviders();
       const oidcConfigured = providers.some((p) => p.id === 'oidc');
+      const oidcPlaceholderVars = getOidcPlaceholderWarnings();
       logger.info('app.startup.auth_providers', {
         providers: providers.map((p) => p.id),
         oidcConfigured,
         ...(oidcConfigured ? { oidcModes: getOidcModes() } : {}),
+        // Distinguishes "OIDC never configured" from "configured with an
+        // unresolved <...> placeholder" — both otherwise log identically.
+        ...(oidcPlaceholderVars.length > 0 ? { oidcPlaceholderVars } : {}),
       });
 
       const { startPoller } = await import('@/server/lib/auth-health-poller');

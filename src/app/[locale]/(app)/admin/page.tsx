@@ -141,7 +141,15 @@ function SystemHealthSection() {
                   unknown case gets its own neutral rendering — matching how
                   the database and uptime cards degrade. */}
               <span
-                className={`h-2.5 w-2.5 rounded-full ${data === undefined ? 'bg-gray-400' : data.oidc.configured ? 'bg-green-500' : 'bg-gray-400'}`}
+                className={`h-2.5 w-2.5 rounded-full ${
+                  data === undefined
+                    ? 'bg-gray-400'
+                    : !data.oidc.configured
+                      ? 'bg-gray-400'
+                      : data.oidc.discoveryReachable === false
+                        ? 'bg-amber-500'
+                        : 'bg-green-500'
+                }`}
               />
               <span className="text-sm font-medium">
                 {data === undefined
@@ -151,6 +159,9 @@ function SystemHealthSection() {
                     : t('systemHealth.oidcNotConfigured')}
               </span>
             </div>
+            {data?.oidc.configured && data.oidc.discoveryReachable === false && (
+              <p className="mt-1 text-xs text-amber-500">{t('systemHealth.oidcDiscoveryUnreachable')}</p>
+            )}
             {data?.oidc.configured && oidcModeLabels(data.oidc, t).length > 0 && (
               <p className="mt-1 text-xs text-muted-foreground">{oidcModeLabels(data.oidc, t).join(' · ')}</p>
             )}
