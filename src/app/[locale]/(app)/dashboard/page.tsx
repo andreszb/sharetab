@@ -83,9 +83,12 @@ export default function DashboardPage() {
   // sums are meaningless, so the aggregate numbers are suppressed entirely
   // (no FX conversion is attempted) and a "mixed currencies" note is shown
   // instead. Zero-balance groups are ignored: they contribute nothing to
-  // the totals, and per-person debts can't involve a net-zero member
-  // (simplifyDebts gives them no edges), so an empty or settled group in
-  // another currency must not suppress otherwise-valid aggregates.
+  // the totals, so an empty or settled group in another currency must not
+  // suppress otherwise-valid aggregates.
+  //
+  // This applies only to these two aggregate cards. The per-person debt cards
+  // below come from balances.getOverallDebts, which converts to the viewer's
+  // currency server-side and needs no such guard.
   const groupCurrencies = new Set(dashboard.data?.perGroup.filter((g) => g.balance !== 0).map((g) => g.currency) ?? []);
   const hasMixedCurrencies = groupCurrencies.size > 1;
   // All-settled fallback uses the ordered groups list (updatedAt desc) so
@@ -93,6 +96,11 @@ export default function DashboardPage() {
   // comes from an unordered query and its index 0 is arbitrary.
   const aggregateCurrency =
     groupCurrencies.size === 1 ? [...groupCurrencies][0]! : (groups.data?.[0]?.currency ?? 'USD');
+
+  // Per-person debts are computed as an exact pairwise ledger and converted to
+  // the viewer's own currency server-side, so unlike the aggregate totals above
+  // they stay meaningful across groups with different currencies.
+  const debtsCurrency = overallDebts.data?.displayCurrency ?? aggregateCurrency;
 
   return (
     <div className="space-y-8">
@@ -167,45 +175,41 @@ export default function DashboardPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {/* Cross-currency nets are not meaningful — even the owed/owes
-                classification can be wrong — so suppress the rows entirely
-                and point at per-group balances instead. */}
-            {hasMixedCurrencies ? (
-              <p className="py-3 text-center text-sm text-muted-foreground">{t('mixedCurrenciesDebts')}</p>
-            ) : (
-              <>
-                {overallDebts.isLoading && (
-                  <div className="divide-y divide-border/60">
-                    {[0, 1, 2].map((i) => (
-                      <PersonRowSkeleton key={i} />
-                    ))}
-                  </div>
-                )}
-                {overallDebts.data?.owedToYou.length === 0 && (
-                  <p className="py-3 text-center text-sm text-muted-foreground">{t('settledUp')}</p>
-                )}
-                <div className="divide-y divide-border/60">
-                  {overallDebts.data?.owedToYou.map((person) => (
-                    <div
-                      key={person.userId}
-                      className="flex items-center justify-between rounded-md px-1 py-2.5 transition-colors hover:bg-muted/50"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div
-                          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-medium text-white shadow-sm ${avatarColor(person.userId)}`}
-                        >
-                          {getInitials(person.userName)}
-                        </div>
-                        <span className="text-sm font-medium">{person.userName}</span>
-                      </div>
-                      <span className="text-sm font-semibold tabular-nums text-green-600 dark:text-green-400">
-                        {formatCents(person.amount, aggregateCurrency, locale)}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </>
+            {/* Pairwise, not simplify-debts: these rows only ever pair the
+                viewer with someone they actually shared an expense with. */}
+            {overallDebts.isLoading && (
+              <div className="divide-y divide-border/60">
+                {[0, 1, 2].map((i) => (
+                  <PersonRowSkeleton key={i} />
+                ))}
+              </div>
             )}
+            {overallDebts.data?.ratesUnavailable && (
+              <p className="pb-2 text-xs text-muted-foreground">{t('approximateRates')}</p>
+            )}
+            {overallDebts.data?.owedToYou.length === 0 && (
+              <p className="py-3 text-center text-sm text-muted-foreground">{t('settledUp')}</p>
+            )}
+            <div className="divide-y divide-border/60">
+              {overallDebts.data?.owedToYou.map((person) => (
+                <div
+                  key={person.userId}
+                  className="flex items-center justify-between rounded-md px-1 py-2.5 transition-colors hover:bg-muted/50"
+                >
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-medium text-white shadow-sm ${avatarColor(person.userId)}`}
+                    >
+                      {getInitials(person.userName)}
+                    </div>
+                    <span className="text-sm font-medium">{person.userName}</span>
+                  </div>
+                  <span className="text-sm font-semibold tabular-nums text-green-600 dark:text-green-400">
+                    {formatCents(person.amount, debtsCurrency, locale)}
+                  </span>
+                </div>
+              ))}
+            </div>
           </CardContent>
         </Card>
 
@@ -218,42 +222,39 @@ export default function DashboardPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {hasMixedCurrencies ? (
-              <p className="py-3 text-center text-sm text-muted-foreground">{t('mixedCurrenciesDebts')}</p>
-            ) : (
-              <>
-                {overallDebts.isLoading && (
-                  <div className="divide-y divide-border/60">
-                    {[0, 1, 2].map((i) => (
-                      <PersonRowSkeleton key={i} />
-                    ))}
-                  </div>
-                )}
-                {overallDebts.data?.youOwe.length === 0 && (
-                  <p className="py-3 text-center text-sm text-muted-foreground">{t('settledUp')}</p>
-                )}
-                <div className="divide-y divide-border/60">
-                  {overallDebts.data?.youOwe.map((person) => (
-                    <div
-                      key={person.userId}
-                      className="flex items-center justify-between rounded-md px-1 py-2.5 transition-colors hover:bg-muted/50"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div
-                          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-medium text-white shadow-sm ${avatarColor(person.userId)}`}
-                        >
-                          {getInitials(person.userName)}
-                        </div>
-                        <span className="text-sm font-medium">{person.userName}</span>
-                      </div>
-                      <span className="text-sm font-semibold tabular-nums text-red-600 dark:text-red-400">
-                        {formatCents(person.amount, aggregateCurrency, locale)}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </>
+            {overallDebts.isLoading && (
+              <div className="divide-y divide-border/60">
+                {[0, 1, 2].map((i) => (
+                  <PersonRowSkeleton key={i} />
+                ))}
+              </div>
             )}
+            {overallDebts.data?.ratesUnavailable && (
+              <p className="pb-2 text-xs text-muted-foreground">{t('approximateRates')}</p>
+            )}
+            {overallDebts.data?.youOwe.length === 0 && (
+              <p className="py-3 text-center text-sm text-muted-foreground">{t('settledUp')}</p>
+            )}
+            <div className="divide-y divide-border/60">
+              {overallDebts.data?.youOwe.map((person) => (
+                <div
+                  key={person.userId}
+                  className="flex items-center justify-between rounded-md px-1 py-2.5 transition-colors hover:bg-muted/50"
+                >
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-medium text-white shadow-sm ${avatarColor(person.userId)}`}
+                    >
+                      {getInitials(person.userName)}
+                    </div>
+                    <span className="text-sm font-medium">{person.userName}</span>
+                  </div>
+                  <span className="text-sm font-semibold tabular-nums text-red-600 dark:text-red-400">
+                    {formatCents(person.amount, debtsCurrency, locale)}
+                  </span>
+                </div>
+              ))}
+            </div>
           </CardContent>
         </Card>
       </div>

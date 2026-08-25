@@ -33,6 +33,41 @@ export type Settlement = {
 };
 
 /**
+ * Rescale a set of shares from one total to another, preserving the invariant
+ * that they sum to exactly `toTotal`.
+ *
+ * Deterministic: shares are visited in `userId` order and the final share
+ * absorbs the rounding remainder, so no cents are created or lost. Returns the
+ * input untouched when the totals already match or when `fromTotal` is 0.
+ *
+ * Used for currency conversion, where naively rounding each share
+ * independently would drift away from the converted total.
+ */
+export function scaleShares(
+  shares: { userId: string; amount: number }[],
+  fromTotal: number,
+  toTotal: number,
+): { userId: string; amount: number }[] {
+  // Always hand back a fresh array, so callers can never mutate the input
+  // through the result on the no-op path.
+  if (fromTotal === 0 || fromTotal === toTotal) return [...shares];
+
+  const ratio = toTotal / fromTotal;
+  const sorted = [...shares].sort((a, b) => a.userId.localeCompare(b.userId));
+  let distributed = 0;
+
+  return sorted.map((share, i) => {
+    if (i === sorted.length - 1) {
+      // Last share gets the remainder to avoid rounding drift
+      return { userId: share.userId, amount: toTotal - distributed };
+    }
+    const scaled = Math.round(share.amount * ratio);
+    distributed += scaled;
+    return { userId: share.userId, amount: scaled };
+  });
+}
+
+/**
  * Simplify a set of member balances into the minimum number of debts.
  * Uses a greedy algorithm: match largest creditor with largest debtor.
  */
@@ -98,28 +133,9 @@ export function computeBalances(expenses: Expense[], settlements: Settlement[]):
     payer.paid += effectiveAmount;
 
     // If currency was converted, scale each share proportionally
-    if (expense.baseCurrencyAmount != null && expense.baseCurrencyAmount !== expense.amount) {
-      const ratio = expense.baseCurrencyAmount / expense.amount;
-      let distributed = 0;
-      const sortedShares = [...expense.shares].sort((a, b) => a.userId.localeCompare(b.userId));
-      const scaledShares = sortedShares.map((share, i) => {
-        if (i === sortedShares.length - 1) {
-          // Last share gets the remainder to avoid rounding drift
-          return { userId: share.userId, amount: effectiveAmount - distributed };
-        }
-        const scaled = Math.round(share.amount * ratio);
-        distributed += scaled;
-        return { userId: share.userId, amount: scaled };
-      });
-      for (const share of scaledShares) {
-        const member = getOrCreate(share.userId);
-        member.owes += share.amount;
-      }
-    } else {
-      for (const share of expense.shares) {
-        const member = getOrCreate(share.userId);
-        member.owes += share.amount;
-      }
+    for (const share of scaleShares(expense.shares, expense.amount, effectiveAmount)) {
+      const member = getOrCreate(share.userId);
+      member.owes += share.amount;
     }
   }
 
