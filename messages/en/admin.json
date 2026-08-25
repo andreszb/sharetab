@@ -160,7 +160,9 @@
     "typeGroupArchived": "Group Archived",
     "typeGroupUnarchived": "Group Unarchived",
     "typePlaceholderCreated": "Placeholder Added",
-    "typeSettlementCreated": "Settlement"
+    "typeSettlementCreated": "Settlement",
+    "typeFriendInviteSent": "Friend Invite Sent",
+    "typeFriendInviteAccepted": "Friend Invite Accepted"
   },
   "tools": {
     "title": "Admin Tools",

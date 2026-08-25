@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'vitest';
-import { evaluateDirectParticipants, type Connection } from './direct-participants';
+import { evaluateDirectParticipants, mayRecordDirectPaymentFrom, type Connection } from './direct-participants';
 import type { FriendshipRow } from './friendship-policy';
 
 const outgoing = (to: string, status: FriendshipRow['status'] = 'PENDING'): FriendshipRow => ({
@@ -132,5 +132,27 @@ describe('multiple participants', () => {
 
   test('the viewer is never checked for a connection to themselves', () => {
     expect(evaluate(['me', 'me'], {})).toEqual({ ok: true });
+  });
+});
+
+// ── who a direct settlement may be recorded from ──────────────────────────
+
+describe('direct settlement payer', () => {
+  test('the viewer may record their own payment', () => {
+    expect(mayRecordDirectPaymentFrom('me', { id: 'me', isPlaceholder: false })).toBe(true);
+  });
+
+  test('the viewer may not record another account holder as the payer', () => {
+    expect(mayRecordDirectPaymentFrom('me', { id: 'bob', isPlaceholder: false })).toBe(false);
+  });
+
+  test('a placeholder payer is allowed, because it can never record its own', () => {
+    // Without this, a debt a placeholder owes the viewer would be permanently
+    // unclearable: nobody can log in as the placeholder to settle it.
+    expect(mayRecordDirectPaymentFrom('me', { id: 'ghost', isPlaceholder: true })).toBe(true);
+  });
+
+  test('the viewer is still allowed when their own account is a placeholder', () => {
+    expect(mayRecordDirectPaymentFrom('me', { id: 'me', isPlaceholder: true })).toBe(true);
   });
 });

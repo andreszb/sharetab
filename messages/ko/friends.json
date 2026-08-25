@@ -1,0 +1,88 @@
+{
+  "title": "친구",
+  "subtitle": "그룹 안팎에서 비용을 함께 나누는 모든 사람.",
+  "addFriend": "친구 추가",
+  "searchPlaceholder": "친구 검색",
+  "noFriends": "아직 친구가 없습니다.",
+  "noFriendsDescription": "가입할 때 사용한 이메일로 추가하거나, ShareTab을 쓰지 않는 사람은 이름으로 추가하세요.",
+  "noSearchResults": "검색과 일치하는 친구가 없습니다.",
+  "settledUp": "정산 완료",
+  "owesYou": "받을 금액",
+  "youOwe": "줄 금액",
+  "amountHidden": "숨김",
+  "approximateRates": "일부 금액은 대략적인 환율을 사용합니다.",
+  "pendingTitle": "초대",
+  "allTitle": "모든 친구",
+  "status": {
+    "pendingIncoming": "나를 초대함",
+    "pendingOutgoing": "초대 보냄",
+    "rejected": "거절됨",
+    "placeholder": "ShareTab 미사용"
+  },
+  "sources": {
+    "group": "공유 그룹",
+    "expense": "공유 지출"
+  },
+  "actions": {
+    "accept": "수락",
+    "reject": "거절",
+    "resend": "다시 보내기"
+  },
+  "add": {
+    "title": "친구 추가",
+    "description": "가입할 때 사용한 이메일로 초대하거나, ShareTab을 쓰지 않는 사람은 이름으로 추가하세요.",
+    "byEmail": "이메일로",
+    "byName": "이름으로",
+    "emailLabel": "이메일",
+    "emailPlaceholder": "friend@example.com",
+    "nameLabel": "이름",
+    "namePlaceholder": "Alex",
+    "nameHint": "아무에게도 알림이 가지 않습니다. 함께 나누고 정산할 수 있는 임시 멤버이며, 나중에 실제 계정과 병합할 수 있습니다.",
+    "submitEmail": "초대 보내기",
+    "submitName": "친구 추가",
+    "submitting": "저장 중…"
+  },
+  "detail": {
+    "back": "친구 목록으로",
+    "notFound": "이 사람은 친구 목록에 없습니다.",
+    "owesYou": "{name}에게 받을 금액",
+    "youOwe": "{name}에게 줄 금액",
+    "settled": "{name}님과 정산이 끝났습니다",
+    "hiddenOutgoing": "{name}님이 초대를 수락할 때까지 금액은 숨겨집니다.",
+    "hiddenIncoming": "초대를 수락하면 {name}님과 잔액을 공유합니다.",
+    "addExpense": "지출 추가",
+    "settleUp": "정산하기",
+    "ledgerTitle": "공유 내역",
+    "noLedger": "아직 공유한 내역이 없습니다.",
+    "truncated": "최근 {count}건만 표시합니다. 위의 잔액은 전체를 반영합니다.",
+    "direct": "개인",
+    "youPaid": "내가 결제",
+    "friendPaid": "{name} 결제",
+    "youSettled": "{name}에게 지급함",
+    "friendSettled": "{name}에게 받음",
+    "payment": "결제"
+  },
+  "expense": {
+    "title": "새 공유 지출",
+    "subtitle": "그룹에 속하지 않습니다. 아래 사람들과의 잔액만 달라집니다.",
+    "splitWith": "함께 나눌 사람",
+    "splitWithHint": "이미 잔액을 볼 수 있는 사람은 누구나 추가할 수 있습니다.",
+    "you": "나",
+    "back": "{name}(으)로 돌아가기"
+  },
+  "settle": {
+    "title": "{name}님과 정산",
+    "description": "그룹 밖의 결제를 기록합니다. 공유 그룹의 잔액은 영향을 받지 않습니다.",
+    "direction": "결제",
+    "youPaid": "내가 {name}에게 지급",
+    "friendPaid": "{name}에게서 받음",
+    "friendPaidHint": "{name}님이 ShareTab을 쓰지 않아 대신 기록합니다.",
+    "theirPaymentHint": "{name}님이 당신에게 빚이 있습니다. 이를 청산하는 결제는 본인만 기록할 수 있으며, 이 양식은 당신이 상대에게 보낸 결제를 기록합니다.",
+    "amount": "금액",
+    "note": "메모",
+    "notePlaceholder": "선택 사항",
+    "useSuggested": "{amount} 사용",
+    "submit": "결제 기록",
+    "submitting": "기록 중…"
+  }
+}

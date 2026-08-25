@@ -160,7 +160,9 @@
     "typeGroupArchived": "群组归档",
     "typeGroupUnarchived": "取消群组归档",
     "typePlaceholderCreated": "添加占位成员",
-    "typeSettlementCreated": "结算"
+    "typeSettlementCreated": "结算",
+    "typeFriendInviteSent": "已发送好友邀请",
+    "typeFriendInviteAccepted": "已接受好友邀请"
   },
   "tools": {
     "title": "管理工具",

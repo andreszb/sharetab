@@ -60,3 +60,22 @@ export function evaluateDirectParticipants(input: {
 
   return { ok: true };
 }
+
+/**
+ * Who a direct settlement may be recorded *from*.
+ *
+ * Inside a group an owner or admin may record a payment on someone else's
+ * behalf. Outside one there is no such role, so the default is that you record
+ * only payments you made — asserting that somebody else paid you is not yours
+ * to assert.
+ *
+ * The exception is a placeholder. A placeholder has no account and can never
+ * log in to record anything, so refusing here would not protect them; it would
+ * simply make a debt they owe the viewer permanently unclearable, which is the
+ * one direction the Friends feature exists to track. Whoever is already allowed
+ * to transact with the placeholder — `evaluateDirectParticipants` still has to
+ * pass — may therefore record its payments too.
+ */
+export function mayRecordDirectPaymentFrom(viewerId: string, payer: { id: string; isPlaceholder: boolean }): boolean {
+  return payer.id === viewerId || payer.isPlaceholder;
+}

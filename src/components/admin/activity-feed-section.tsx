@@ -28,6 +28,8 @@ export function ActivityFeedSection() {
     PLACEHOLDER_MERGED: t('activity.typePlaceholderMerged'),
     GROUP_ARCHIVED: t('activity.typeGroupArchived'),
     GROUP_UNARCHIVED: t('activity.typeGroupUnarchived'),
+    FRIEND_INVITE_SENT: t('activity.typeFriendInviteSent'),
+    FRIEND_INVITE_ACCEPTED: t('activity.typeFriendInviteAccepted'),
   };
 
   return (

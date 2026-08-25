@@ -160,7 +160,9 @@
     "typeGroupArchived": "Grupo arquivado",
     "typeGroupUnarchived": "Grupo desarquivado",
     "typePlaceholderCreated": "Marcador adicionado",
-    "typeSettlementCreated": "Acerto"
+    "typeSettlementCreated": "Acerto",
+    "typeFriendInviteSent": "Convite de amizade enviado",
+    "typeFriendInviteAccepted": "Convite de amizade aceito"
   },
   "tools": {
     "title": "Ferramentas administrativas",

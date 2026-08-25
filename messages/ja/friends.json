@@ -1,0 +1,88 @@
+{
+  "title": "友だち",
+  "subtitle": "グループの内外を問わず、費用を分け合っているすべての人。",
+  "addFriend": "友だちを追加",
+  "searchPlaceholder": "友だちを検索",
+  "noFriends": "まだ友だちがいません。",
+  "noFriendsDescription": "登録に使ったメールアドレスで追加するか、ShareTab を使っていない人は名前で追加できます。",
+  "noSearchResults": "検索条件に一致する友だちはいません。",
+  "settledUp": "精算済み",
+  "owesYou": "あなたへの貸し",
+  "youOwe": "あなたの借り",
+  "amountHidden": "非表示",
+  "approximateRates": "一部の金額は概算の為替レートを使用しています。",
+  "pendingTitle": "招待",
+  "allTitle": "すべての友だち",
+  "status": {
+    "pendingIncoming": "招待されています",
+    "pendingOutgoing": "招待を送信済み",
+    "rejected": "辞退されました",
+    "placeholder": "ShareTab 未登録"
+  },
+  "sources": {
+    "group": "共有グループ",
+    "expense": "共有した支出"
+  },
+  "actions": {
+    "accept": "承認",
+    "reject": "辞退",
+    "resend": "再送"
+  },
+  "add": {
+    "title": "友だちを追加",
+    "description": "登録に使ったメールアドレスで招待するか、ShareTab を使っていない人は名前で追加できます。",
+    "byEmail": "メールで",
+    "byName": "名前で",
+    "emailLabel": "メールアドレス",
+    "emailPlaceholder": "friend@example.com",
+    "nameLabel": "名前",
+    "namePlaceholder": "アレックス",
+    "nameHint": "誰にも通知されません。割り勘や精算に使える仮の相手で、あとから実際のアカウントに統合できます。",
+    "submitEmail": "招待を送信",
+    "submitName": "友だちを追加",
+    "submitting": "保存中…"
+  },
+  "detail": {
+    "back": "友だち一覧へ戻る",
+    "notFound": "この人は友達リストにいません。",
+    "owesYou": "{name} からの貸し",
+    "youOwe": "{name} への借り",
+    "settled": "{name} とは精算済みです",
+    "hiddenOutgoing": "{name} が招待を承認するまで金額は表示されません。",
+    "hiddenIncoming": "招待を承認すると {name} と残高を共有できます。",
+    "addExpense": "支出を追加",
+    "settleUp": "精算する",
+    "ledgerTitle": "共有した履歴",
+    "noLedger": "まだ何も共有していません。",
+    "truncated": "最新の {count} 件を表示しています。上の残高はすべてを含んでいます。",
+    "direct": "個人間",
+    "youPaid": "あなたが支払い",
+    "friendPaid": "{name} が支払い",
+    "youSettled": "{name} に支払いました",
+    "friendSettled": "{name} から受け取りました",
+    "payment": "支払い"
+  },
+  "expense": {
+    "title": "新しい共有支出",
+    "subtitle": "グループ外の支出です。下の人たちとの残高だけが変わります。",
+    "splitWith": "分け合う相手",
+    "splitWithHint": "すでに残高を見られる相手なら誰でも追加できます。",
+    "you": "あなた",
+    "back": "{name} へ戻る"
+  },
+  "settle": {
+    "title": "{name} と精算",
+    "description": "グループ外の支払いとして記録します。共有グループ内の残高は変わりません。",
+    "direction": "支払い",
+    "youPaid": "{name} に支払った",
+    "friendPaid": "{name} から受け取った",
+    "friendPaidHint": "{name} は ShareTab を使っていないため、代理で記録します。",
+    "theirPaymentHint": "{name} はあなたに借りがあります。それを清算する支払いを記録できるのは本人だけです。このフォームはあなたが相手に支払った分を記録します。",
+    "amount": "金額",
+    "note": "メモ",
+    "notePlaceholder": "任意",
+    "useSuggested": "{amount} を使う",
+    "submit": "支払いを記録",
+    "submitting": "記録中…"
+  }
+}

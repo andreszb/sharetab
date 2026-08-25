@@ -6,7 +6,7 @@ import { trpc } from '@/lib/trpc';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { LayoutDashboard, Users, Receipt, LogOut, Settings, Shield, Heart, Scissors } from 'lucide-react';
+import { LayoutDashboard, Users, Receipt, LogOut, Settings, Shield, Heart, Scissors, UserRound } from 'lucide-react';
 import { ThemeToggle } from '@/components/layout/theme-toggle';
 import { LanguageSwitcher } from '@/components/layout/language-switcher';
 import { useTranslations, useLocale } from 'next-intl';
@@ -38,6 +38,7 @@ function SponsorBanner() {
 const navItems = [
   { href: '/dashboard', key: 'dashboard', icon: LayoutDashboard },
   { href: '/groups', key: 'groups', icon: Users },
+  { href: '/friends', key: 'friends', icon: UserRound },
   { href: '/split', key: 'quickSplit', icon: Receipt },
   { href: '/splits', key: 'mySplits', icon: Scissors },
 ] as const;
