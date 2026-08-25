@@ -6,6 +6,8 @@ import { auth } from '../auth';
 import { db } from '../db';
 import { logger } from '../lib/logger';
 import { verifyAndParse } from '../lib/signed-cookie';
+import { canViewAmountsFor, primaryFriendship } from '../lib/friendship-policy';
+import { sharedGroupMembership, sharedNonGroupExpense } from '../lib/friend-queries';
 
 const IMPERSONATE_COOKIE = 'sharetab-impersonate';
 
@@ -128,4 +130,64 @@ export const groupMemberProcedure = protectedProcedure
       throw new TRPCError({ code: 'FORBIDDEN', message: 'Not a member of this group' });
     }
     return next({ ctx: { ...ctx, membership } });
+  });
+
+/**
+ * The non-group sibling of `groupMemberProcedure`.
+ *
+ * `groupMemberProcedure` bakes a required `groupId` into its input schema and
+ * authorizes against `GroupMember`, so nothing outside a group can reuse it.
+ * This one bakes `friendId` instead and authorizes on connection: an explicit
+ * friendship row in either direction, shared membership of any group, or shared
+ * participation in a direct expense.
+ *
+ * Authorization and visibility are separate questions here. Someone who has
+ * only been *sent* an invite is authorized to open the friend — they must be
+ * able to see and answer it — but must not see any amounts until they accept.
+ * The procedure therefore hands `canViewAmounts` down in the context rather
+ * than conflating the two into one yes/no.
+ */
+export const friendProcedure = protectedProcedure
+  .input(z.object({ friendId: z.string() }))
+  .use(async ({ ctx, input, next }) => {
+    if (input.friendId === ctx.user.id) {
+      throw new TRPCError({ code: 'BAD_REQUEST', message: 'Cannot act on yourself as a friend' });
+    }
+
+    const [friendships, groupTie, expenseTie] = await Promise.all([
+      // Both directions can hold a row, so this must be findMany: findFirst
+      // would pick one of the two arbitrarily and, say, hide a live invite
+      // behind a stale rejected one.
+      ctx.db.friendship.findMany({
+        where: {
+          OR: [
+            { requesterId: ctx.user.id, addresseeId: input.friendId },
+            { requesterId: input.friendId, addresseeId: ctx.user.id },
+          ],
+        },
+      }),
+      ctx.db.groupMember.findFirst({
+        where: sharedGroupMembership(ctx.user.id, input.friendId),
+        select: { id: true },
+      }),
+      ctx.db.expense.findFirst({
+        where: sharedNonGroupExpense(ctx.user.id, input.friendId),
+        select: { id: true },
+      }),
+    ]);
+
+    if (friendships.length === 0 && !groupTie && !expenseTie) {
+      throw new TRPCError({ code: 'FORBIDDEN', message: 'Not connected to this user' });
+    }
+
+    const sharesHistory = groupTie !== null || expenseTie !== null;
+
+    return next({
+      ctx: {
+        ...ctx,
+        friendships,
+        friendship: primaryFriendship(ctx.user.id, friendships),
+        canViewAmounts: canViewAmountsFor(ctx.user.id, friendships, sharesHistory),
+      },
+    });
   });

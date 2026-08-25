@@ -3,6 +3,7 @@ import { authRouter } from './routers/auth';
 import { groupsRouter } from './routers/groups';
 import { expensesRouter } from './routers/expenses';
 import { balancesRouter } from './routers/balances';
+import { friendsRouter } from './routers/friends';
 import { settlementsRouter } from './routers/settlements';
 import { activityRouter } from './routers/activity';
 import { receiptsRouter } from './routers/receipts';
@@ -14,6 +15,7 @@ export const appRouter = createTRPCRouter({
   groups: groupsRouter,
   expenses: expensesRouter,
   balances: balancesRouter,
+  friends: friendsRouter,
   settlements: settlementsRouter,
   activity: activityRouter,
   receipts: receiptsRouter,

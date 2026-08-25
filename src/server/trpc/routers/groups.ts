@@ -3,6 +3,7 @@ import { TRPCError } from '@trpc/server';
 import type { PrismaClient } from '@/generated/prisma/client';
 import { createTRPCRouter, protectedProcedure, groupMemberProcedure } from '../init';
 import { stripUndefined } from '../../lib/strip-undefined';
+import { createPlaceholderUser } from '../../lib/placeholder-user';
 
 export const groupsRouter = createTRPCRouter({
   list: protectedProcedure.query(async ({ ctx }) => {
@@ -422,17 +423,9 @@ export const groupsRouter = createTRPCRouter({
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Only admins and owners can add placeholder members' });
       }
 
-      const { randomUUID } = await import('crypto');
-      const placeholderEmail = `placeholder-${randomUUID()}@placeholder.local`;
-
-      const user = await ctx.db.user.create({
-        data: {
-          email: placeholderEmail,
-          name: input.name,
-          isPlaceholder: true,
-          placeholderName: input.name,
-          createdByUserId: ctx.user.id,
-        },
+      const user = await createPlaceholderUser(ctx.db, {
+        name: input.name,
+        createdByUserId: ctx.user.id,
       });
 
       await ctx.db.groupMember.create({
@@ -520,13 +513,19 @@ export const groupsRouter = createTRPCRouter({
 });
 
 /**
- * Merge all references from a placeholder user into a real user, then delete the placeholder.
+ * Merge all references from a placeholder user into a real user, then delete the
+ * placeholder once nothing points at it any more.
+ *
+ * `groupId` bounds the merge: pass a group id to rewrite only that group's rows
+ * (what the group UI does — the same placeholder may legitimately stand for
+ * different people in different groups), or `null` to merge the placeholder
+ * everywhere, including direct expenses and friendships that no group owns.
  */
 async function mergePlaceholderIntoUser(
   db: PrismaClient,
   placeholderUserId: string,
   realUserId: string,
-  groupId: string,
+  groupId: string | null,
 ) {
   await db.$transaction(async (tx) => {
     // Hard guard: this helper reassigns financial history and may delete the
@@ -539,15 +538,14 @@ async function mergePlaceholderIntoUser(
       throw new TRPCError({ code: 'BAD_REQUEST', message: 'Not a placeholder user' });
     }
 
-    const groupExpenseIds = (
-      await tx.expense.findMany({
-        where: { groupId },
-        select: { id: true },
-      })
-    ).map((e) => e.id);
+    // Empty when merging everywhere, so each filter below degrades to "any row".
+    const inScope = groupId === null ? {} : { groupId };
 
     const shares = await tx.expenseShare.findMany({
-      where: { userId: placeholderUserId, expenseId: { in: groupExpenseIds } },
+      where: {
+        userId: placeholderUserId,
+        ...(groupId === null ? {} : { expense: { groupId } }),
+      },
     });
     for (const share of shares) {
       const existing = await tx.expenseShare.findUnique({
@@ -567,61 +565,61 @@ async function mergePlaceholderIntoUser(
       }
     }
 
-    const groupReceiptItemIds = (
-      await tx.receiptItem.findMany({
-        where: {
-          receipt: {
-            OR: [{ expense: { groupId } }, { groupId }],
-          },
-        },
-        select: { id: true },
-      })
-    ).map((ri) => ri.id);
-    if (groupReceiptItemIds.length > 0) {
-      const placeholderAssignments = await tx.receiptItemAssignment.findMany({
-        where: { userId: placeholderUserId, receiptItemId: { in: groupReceiptItemIds } },
+    const placeholderAssignments = await tx.receiptItemAssignment.findMany({
+      where: {
+        userId: placeholderUserId,
+        ...(groupId === null ? {} : { receiptItem: { receipt: { OR: [{ expense: { groupId } }, { groupId }] } } }),
+      },
+    });
+    for (const assignment of placeholderAssignments) {
+      const existing = await tx.receiptItemAssignment.findFirst({
+        where: { receiptItemId: assignment.receiptItemId, userId: realUserId },
       });
-      for (const assignment of placeholderAssignments) {
-        const existing = await tx.receiptItemAssignment.findFirst({
-          where: { receiptItemId: assignment.receiptItemId, userId: realUserId },
+      if (existing) {
+        await tx.receiptItemAssignment.delete({ where: { id: assignment.id } });
+      } else {
+        await tx.receiptItemAssignment.update({
+          where: { id: assignment.id },
+          data: { userId: realUserId },
         });
-        if (existing) {
-          await tx.receiptItemAssignment.delete({ where: { id: assignment.id } });
-        } else {
-          await tx.receiptItemAssignment.update({
-            where: { id: assignment.id },
-            data: { userId: realUserId },
-          });
-        }
       }
     }
 
     await tx.expense.updateMany({
-      where: { paidById: placeholderUserId, groupId },
+      where: { paidById: placeholderUserId, ...inScope },
       data: { paidById: realUserId },
     });
     await tx.expense.updateMany({
-      where: { addedById: placeholderUserId, groupId },
+      where: { addedById: placeholderUserId, ...inScope },
       data: { addedById: realUserId },
     });
 
     await tx.settlement.updateMany({
-      where: { fromId: placeholderUserId, groupId },
+      where: { fromId: placeholderUserId, ...inScope },
       data: { fromId: realUserId },
     });
     await tx.settlement.updateMany({
-      where: { toId: placeholderUserId, groupId },
+      where: { toId: placeholderUserId, ...inScope },
       data: { toId: realUserId },
     });
 
     await tx.activityLog.updateMany({
-      where: { userId: placeholderUserId, groupId },
+      where: { userId: placeholderUserId, ...inScope },
       data: { userId: realUserId },
     });
 
     await tx.groupMember.deleteMany({
-      where: { userId: placeholderUserId, groupId },
+      where: { userId: placeholderUserId, ...inScope },
     });
+
+    if (groupId === null) {
+      // Dropped rather than reassigned: the real user's own friendships already
+      // stand, and moving these would collide with the unique pair constraint
+      // wherever both the placeholder and the real user knew the same person.
+      await tx.friendship.deleteMany({
+        where: { OR: [{ requesterId: placeholderUserId }, { addresseeId: placeholderUserId }] },
+      });
+    }
 
     await tx.activityLog.create({
       data: {
@@ -632,10 +630,24 @@ async function mergePlaceholderIntoUser(
       },
     });
 
-    const remainingMemberships = await tx.groupMember.count({
-      where: { userId: placeholderUserId },
-    });
-    if (remainingMemberships === 0) {
+    // This helper is group-scoped: everything above only rewrote rows carrying
+    // this groupId. A placeholder can also hold rows that no group owns — a
+    // direct expense, or the friendship that made it reachable in the first
+    // place — and deleting the user out from under those would fail on the
+    // foreign keys. Only reclaim the row once genuinely nothing points at it.
+    const [memberships, shareCount, expensesPaid, expensesAdded, settlementCount, friendships] = await Promise.all([
+      tx.groupMember.count({ where: { userId: placeholderUserId } }),
+      tx.expenseShare.count({ where: { userId: placeholderUserId } }),
+      tx.expense.count({ where: { paidById: placeholderUserId } }),
+      tx.expense.count({ where: { addedById: placeholderUserId } }),
+      tx.settlement.count({ where: { OR: [{ fromId: placeholderUserId }, { toId: placeholderUserId }] } }),
+      tx.friendship.count({
+        where: { OR: [{ requesterId: placeholderUserId }, { addresseeId: placeholderUserId }] },
+      }),
+    ]);
+
+    const stillReferenced = memberships + shareCount + expensesPaid + expensesAdded + settlementCount + friendships > 0;
+    if (!stillReferenced) {
       await tx.user.delete({ where: { id: placeholderUserId } });
     }
   });
