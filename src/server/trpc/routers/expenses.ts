@@ -1,11 +1,12 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
-import { createTRPCRouter, groupMemberProcedure, ledgerScopeProcedure, type LedgerScope } from '../init';
+import { createTRPCRouter, groupMemberProcedure, ledgerScopeProcedure, scopeGroupId, type LedgerScope } from '../init';
 import { SplitMode } from '@/generated/prisma/client';
 import { getExchangeRate, convertCents } from '../../lib/exchange-rates';
 import { MAX_MONEY_CENTS } from '@/lib/money';
 import { stripUndefined } from '../../lib/strip-undefined';
 import { assertDirectParticipants } from '../../lib/friend-connections';
+import { participates } from '../../lib/friend-queries';
 
 const expenseShareSchema = z.object({
   userId: z.string(),
@@ -24,19 +25,15 @@ const expenseSharesArraySchema = z
 const exchangeRateSchema = z.number().positive().finite().max(1_000_000);
 
 /**
- * The group id a row should carry, normalised for comparison.
+ * Who may change an existing expense, as a message.
  *
- * `groupId` is nullish on the wire but null in the database, and `undefined
- * !== null`, so comparing the raw input would turn every direct expense into
- * a 404.
+ * Outside a group nobody holds a role, so the owner/admin half of the sentence
+ * would be a lie there.
  */
-function scopeGroupId(scope: LedgerScope): string | null {
-  return scope.kind === 'group' ? scope.groupId : null;
-}
-
-/** Whether the viewer paid for this expense or holds a share of it. */
-function participates(expense: { paidById: string; shares?: { userId: string }[] }, userId: string): boolean {
-  return expense.paidById === userId || (expense.shares?.some((share) => share.userId === userId) ?? false);
+function editDeniedMessage(scope: LedgerScope, verb: 'modify' | 'delete'): string {
+  return scope.kind === 'group'
+    ? `Only the expense creator, payer, or group owner/admin can ${verb} this expense`
+    : `Only the expense creator or payer can ${verb} this expense`;
 }
 
 export const expensesRouter = createTRPCRouter({
@@ -298,10 +295,7 @@ export const expensesRouter = createTRPCRouter({
       if (!isOwnerOrAdmin && !isCreatorOrPayer) {
         throw new TRPCError({
           code: 'FORBIDDEN',
-          message:
-            scope.kind === 'group'
-              ? 'Only the expense creator, payer, or group owner/admin can modify this expense'
-              : 'Only the expense creator or payer can modify this expense',
+          message: editDeniedMessage(scope, 'modify'),
         });
       }
 
@@ -455,10 +449,7 @@ export const expensesRouter = createTRPCRouter({
     if (!isOwnerOrAdmin && !isCreatorOrPayer) {
       throw new TRPCError({
         code: 'FORBIDDEN',
-        message:
-          scope.kind === 'group'
-            ? 'Only the expense creator, payer, or group owner/admin can delete this expense'
-            : 'Only the expense creator or payer can delete this expense',
+        message: editDeniedMessage(scope, 'delete'),
       });
     }
 

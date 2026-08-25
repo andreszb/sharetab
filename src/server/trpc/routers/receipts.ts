@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import { Prisma } from '@/generated/prisma/client';
 import type { PrismaClient } from '@/generated/prisma/client';
-import { createTRPCRouter, protectedProcedure, ledgerScopeProcedure } from '../init';
+import { createTRPCRouter, protectedProcedure, ledgerScopeProcedure, scopeGroupId } from '../init';
 import { assertDirectConnections, assertDirectParticipants } from '../../lib/friend-connections';
 import { processReceiptImage } from '../../lib/receipt-processor';
 import { logger } from '../../lib/logger';
@@ -420,7 +420,7 @@ export const receiptsRouter = createTRPCRouter({
     )
     .mutation(async ({ ctx, input }) => {
       const scope = ctx.scope;
-      const groupId = scope.kind === 'group' ? scope.groupId : null;
+      const groupId = scopeGroupId(scope);
 
       if (scope.kind === 'group' && scope.group.archivedAt) {
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'Cannot create expenses in archived groups' });
@@ -695,7 +695,7 @@ export const receiptsRouter = createTRPCRouter({
         await tx.receipt.update({
           where: { id: input.receiptId },
           data: {
-            groupId: scope.kind === 'group' ? scope.groupId : null,
+            groupId: scopeGroupId(scope),
             savedById: ctx.user.id,
             ...(input.paidById !== undefined ? { paidById: input.paidById } : {}),
           },

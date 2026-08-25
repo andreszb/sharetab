@@ -1,19 +1,20 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { test, expect, request } from '@playwright/test';
-import { users, authedContext, trpcMutation, trpcQuery, trpcError, uniqueEmail, deleteTestUser } from './helpers';
+import {
+  users,
+  authedContext,
+  trpcMutation,
+  trpcQuery,
+  trpcResult,
+  trpcError,
+  uniqueEmail,
+  deleteTestUser,
+} from './helpers';
 
 const BASE = process.env.BASE_URL || 'http://localhost:3001';
 const PASSWORD = 'password123';
-
-/**
- * Read a tRPC payload from either shape: a batched query replies under
- * `body[0].result`, a mutation under `body.result`. `trpcResult` in helpers.ts
- * only handles the first, and this spec calls both kinds throughout.
- */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function result(res: { json: () => Promise<any> }): Promise<any> {
-  const body = await res.json();
-  return body?.result?.data?.json ?? body?.[0]?.result?.data?.json;
-}
+const AI_TIMEOUT = 120_000;
 
 /**
  * Register a throwaway account through the API and sign in as it.
@@ -55,10 +56,10 @@ test.describe('Friends direct expenses API', () => {
     dana = await registerUser('Dana Direct', emails.dana);
 
     // getProfile omits the id; the session carries it.
-    anaId = (await result(await trpcQuery(ana, 'auth.getSession'))).user.id;
-    benId = (await result(await trpcQuery(ben, 'auth.getSession'))).user.id;
-    cleoId = (await result(await trpcQuery(cleo, 'auth.getSession'))).user.id;
-    danaId = (await result(await trpcQuery(dana, 'auth.getSession'))).user.id;
+    anaId = (await trpcResult(await trpcQuery(ana, 'auth.getSession'))).user.id;
+    benId = (await trpcResult(await trpcQuery(ben, 'auth.getSession'))).user.id;
+    cleoId = (await trpcResult(await trpcQuery(cleo, 'auth.getSession'))).user.id;
+    danaId = (await trpcResult(await trpcQuery(dana, 'auth.getSession'))).user.id;
 
     // Ana invites Ben and Dana. She may log expenses against either straight
     // away — the friendship is one-sided until they answer. Dana is never put
@@ -86,16 +87,16 @@ test.describe('Friends direct expenses API', () => {
         { userId: benId, amount: 2000 },
       ],
     });
-    const expense = await result(res);
+    const expense = await trpcResult(res);
     expect(expense?.id).toBeTruthy();
     expect(expense.groupId).toBeNull();
     // The anchor-currency contract: a direct row carries no base amount.
     expect(expense.baseCurrencyAmount).toBeNull();
 
-    const balance = await result(await trpcQuery(ana, 'friends.getBalance', { friendId: benId }));
+    const balance = await trpcResult(await trpcQuery(ana, 'friends.getBalance', { friendId: benId }));
     expect(balance.net).toBe(2000);
 
-    const ledger = await result(await trpcQuery(ana, 'friends.getLedger', { friendId: benId }));
+    const ledger = await trpcResult(await trpcQuery(ana, 'friends.getLedger', { friendId: benId }));
     expect(ledger.net).toBe(2000);
     expect(ledger.entries.reduce((sum: number, e: { delta: number }) => sum + e.delta, 0)).toBe(2000);
     expect(ledger.entries[0].groupId).toBeNull();
@@ -108,17 +109,17 @@ test.describe('Friends direct expenses API', () => {
       currency: 'USD',
       note: 'Paying Ana back',
     });
-    const settlement = await result(res);
+    const settlement = await trpcResult(res);
     expect(settlement?.id).toBeTruthy();
     expect(settlement.groupId).toBeNull();
     expect(settlement.baseCurrencyAmount).toBeNull();
 
-    const balance = await result(await trpcQuery(ana, 'friends.getBalance', { friendId: benId }));
+    const balance = await trpcResult(await trpcQuery(ana, 'friends.getBalance', { friendId: benId }));
     expect(balance.net).toBe(0);
   });
 
   test('a direct expense reaches the other participant activity feed', async () => {
-    const items = await result(await trpcQuery(ben, 'activity.getRecentActivity', { limit: 20 }));
+    const items = await trpcResult(await trpcQuery(ben, 'activity.getRecentActivity', { limit: 20 }));
     const titles = items.map((item: { metadata?: { title?: string } }) => item.metadata?.title);
     expect(titles).toContain('Dinner, no group');
   });
@@ -138,9 +139,9 @@ test.describe('Friends direct expenses API', () => {
         { userId: cleoId, amount: 1000 },
       ],
     });
-    expect((await result(res))?.id).toBeTruthy();
+    expect((await trpcResult(res))?.id).toBeTruthy();
 
-    const balance = await result(await trpcQuery(ana, 'friends.getBalance', { friendId: cleoId }));
+    const balance = await trpcResult(await trpcQuery(ana, 'friends.getBalance', { friendId: cleoId }));
     expect(balance.net).toBe(1000);
   });
 
@@ -158,7 +159,7 @@ test.describe('Friends direct expenses API', () => {
         { userId: cleoId, amount: 1000 },
       ],
     });
-    expect((await result(res))?.id).toBeTruthy();
+    expect((await trpcResult(res))?.id).toBeTruthy();
   });
 
   test('an unconnected participant is refused', async () => {
@@ -222,11 +223,11 @@ test.describe('Friends direct expenses API', () => {
         { userId: anaId, amount: 1000 },
       ],
     });
-    expect((await result(res))?.id).toBeTruthy();
+    expect((await trpcResult(res))?.id).toBeTruthy();
   });
 
   test('a non-participant cannot read a direct expense', async () => {
-    const created = await result(
+    const created = await trpcResult(
       await trpcMutation(ana, 'expenses.create', {
         title: 'Private to Ana and Ben',
         amount: 1000,
@@ -239,15 +240,65 @@ test.describe('Friends direct expenses API', () => {
       }),
     );
 
-    const mine = await result(await trpcQuery(ana, 'expenses.get', { expenseId: created.id }));
+    const mine = await trpcResult(await trpcQuery(ana, 'expenses.get', { expenseId: created.id }));
     expect(mine.id).toBe(created.id);
 
     const res = await trpcQuery(dana, 'expenses.get', { expenseId: created.id });
     expect((await trpcError(res))?.data?.code).toBe('NOT_FOUND');
   });
 
+  test('scans a receipt into a direct expense', async () => {
+    // Gated like every other receipt spec: it needs an AI provider configured
+    // (AI_PROVIDER_PRIORITY=mock is enough — no real API call).
+    test.skip(!process.env.RUN_AI_TESTS, 'Set RUN_AI_TESTS=1 to enable');
+
+    const upload = await ana.post(`${BASE}/api/upload`, {
+      multipart: {
+        file: {
+          name: 'test-receipt.png',
+          mimeType: 'image/png',
+          buffer: readFileSync(resolve('e2e/test-receipt.png')),
+        },
+      },
+    });
+    expect(upload.status()).toBe(200);
+    const { receiptId } = await upload.json();
+
+    const processed = await trpcResult(await trpcMutation(ana, 'receipts.processReceipt', { receiptId }, AI_TIMEOUT));
+    expect(processed.status).toBe('COMPLETED');
+
+    // An ungrouped receipt is pending for whoever uploaded it.
+    const pending = await trpcResult(await trpcQuery(ana, 'receipts.listPending', {}));
+    expect(pending.map((r: { id: string }) => r.id)).toContain(receiptId);
+
+    const { items } = await trpcResult(await trpcQuery(ana, 'receipts.getReceiptItems', { receiptId }));
+    const assignments = items.slice(0, 4).map((item: { id: string }, i: number) => ({
+      receiptItemId: item.id,
+      userIds: i % 2 === 0 ? [anaId, benId] : [benId],
+    }));
+
+    const expense = await trpcResult(
+      await trpcMutation(ana, 'receipts.assignItemsAndCreateExpense', {
+        receiptId,
+        title: 'Direct receipt split',
+        paidById: anaId,
+        assignments,
+      }),
+    );
+    expect(expense.groupId).toBeNull();
+    expect(expense.splitMode).toBe('ITEM');
+    // The receipt path must honour the anchor contract too — the currency comes
+    // from the receipt (or the viewer's default), never converted into a group's.
+    expect(expense.baseCurrencyAmount).toBeNull();
+    expect(expense.amount).toBeGreaterThan(0);
+
+    // Consuming the receipt clears it from the pending list.
+    const after = await trpcResult(await trpcQuery(ana, 'receipts.listPending', {}));
+    expect(after.map((r: { id: string }) => r.id)).not.toContain(receiptId);
+  });
+
   test('only the creator or payer can delete a direct expense', async () => {
-    const created = await result(
+    const created = await trpcResult(
       await trpcMutation(ana, 'expenses.create', {
         title: 'Ana deletes this',
         amount: 1000,
@@ -265,6 +316,6 @@ test.describe('Friends direct expenses API', () => {
     expect((await trpcError(refused))?.data?.code).toBe('FORBIDDEN');
 
     const deleted = await trpcMutation(ana, 'expenses.delete', { expenseId: created.id });
-    expect((await result(deleted))?.success).toBe(true);
+    expect((await trpcResult(deleted))?.success).toBe(true);
   });
 });

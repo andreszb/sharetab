@@ -13,7 +13,7 @@
 import { TRPCError } from '@trpc/server';
 import type { PrismaClient } from '@/generated/prisma/client';
 import { evaluateDirectParticipants, type Connection } from './direct-participants';
-import { groupCoMembers, participatesInExpense } from './friend-queries';
+import { groupCoMembers, sharedNonGroupExpenseWithAny } from './friend-queries';
 
 export async function loadConnections(
   db: PrismaClient,
@@ -41,7 +41,7 @@ export async function loadConnections(
       distinct: ['userId'],
     }),
     db.expense.findMany({
-      where: { groupId: null, ...participatesInExpense(viewerId) },
+      where: sharedNonGroupExpenseWithAny(viewerId, ids),
       select: { paidById: true, shares: { select: { userId: true } } },
     }),
   ]);

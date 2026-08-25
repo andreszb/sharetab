@@ -211,6 +211,17 @@ export type LedgerScope =
     };
 
 /**
+ * The group id a row written in this scope should carry.
+ *
+ * `groupId` is nullish on the wire but null in the database, and
+ * `undefined !== null`, so comparing the raw input would turn every direct row
+ * into a 404. Lives here so the three routers cannot spell it differently.
+ */
+export function scopeGroupId(scope: LedgerScope): string | null {
+  return scope.kind === 'group' ? scope.groupId : null;
+}
+
+/**
  * `groupMemberProcedure` for procedures that can also run outside a group.
  *
  * `groupId` becomes optional, and the resolved `ctx.scope` is a discriminated

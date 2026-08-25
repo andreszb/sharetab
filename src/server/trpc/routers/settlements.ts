@@ -1,9 +1,13 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
-import { createTRPCRouter, groupMemberProcedure, ledgerScopeProcedure } from '../init';
+import { createTRPCRouter, groupMemberProcedure, ledgerScopeProcedure, scopeGroupId } from '../init';
 import { getExchangeRate, convertCents } from '../../lib/exchange-rates';
 import { MAX_MONEY_CENTS } from '@/lib/money';
 import { assertDirectParticipants } from '../../lib/friend-connections';
+
+// Both scopes refuse this, for different reasons: inside a group only an owner
+// or admin may record someone else's payment, and outside one nobody may.
+const SELF_PAYMENTS_ONLY = 'You can only record payments from yourself';
 
 export const settlementsRouter = createTRPCRouter({
   list: groupMemberProcedure
@@ -84,7 +88,7 @@ export const settlementsRouter = createTRPCRouter({
         if (scope.membership.role === 'MEMBER' && input.fromId && input.fromId !== ctx.user.id) {
           throw new TRPCError({
             code: 'FORBIDDEN',
-            message: 'You can only record payments from yourself',
+            message: SELF_PAYMENTS_ONLY,
           });
         }
 
@@ -108,7 +112,7 @@ export const settlementsRouter = createTRPCRouter({
         if (input.fromId && input.fromId !== ctx.user.id) {
           throw new TRPCError({
             code: 'FORBIDDEN',
-            message: 'You can only record payments from yourself',
+            message: SELF_PAYMENTS_ONLY,
           });
         }
         await assertDirectParticipants(ctx.db, ctx.user.id, [effectiveFromId, input.toId]);
@@ -140,12 +144,10 @@ export const settlementsRouter = createTRPCRouter({
         }
       }
 
-      const groupId = scope.kind === 'group' ? scope.groupId : null;
-
       const settlement = await ctx.db.$transaction(async (tx) => {
         const created = await tx.settlement.create({
           data: {
-            groupId,
+            groupId: scopeGroupId(scope),
             fromId: effectiveFromId,
             toId: input.toId,
             amount: input.amount,
@@ -158,7 +160,7 @@ export const settlementsRouter = createTRPCRouter({
 
         await tx.activityLog.create({
           data: {
-            groupId,
+            groupId: scopeGroupId(scope),
             userId: ctx.user.id,
             type: 'SETTLEMENT_CREATED',
             entityId: created.id,
