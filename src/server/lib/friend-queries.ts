@@ -17,6 +17,17 @@ export function participatesInExpense(userId: string) {
   return { OR: [{ paidById: userId }, { shares: { some: { userId } } }] };
 }
 
+/**
+ * The in-memory form of `participatesInExpense`, for a row already loaded.
+ *
+ * Deliberately adjacent to its Prisma twin: the two answer the same question in
+ * two places, and the whole point of this file is that such a predicate is
+ * written once where both spellings can be seen together.
+ */
+export function participates(expense: { paidById: string; shares?: { userId: string }[] }, userId: string): boolean {
+  return expense.paidById === userId || (expense.shares?.some((share) => share.userId === userId) ?? false);
+}
+
 /** A direct (non-group) expense that both people take part in. */
 export function sharedNonGroupExpense(viewerId: string, otherId: string) {
   return {
@@ -44,5 +55,29 @@ export function groupCoMembers(viewerId: string) {
   return {
     group: { members: { some: { userId: viewerId } }, archivedAt: null },
     NOT: { userId: viewerId },
+  };
+}
+
+/**
+ * A direct expense the viewer shares with **any** of `otherIds`.
+ *
+ * The set version of `sharedNonGroupExpense`. Validating a participant list one
+ * counterparty at a time would be N queries, but reading every direct expense
+ * the viewer has ever been in is an unbounded scan on a write path — this asks
+ * only for the rows that could possibly connect somebody in the list.
+ *
+ * Written as two `in` lists rather than an `OR` of per-id `participatesInExpense`
+ * fragments: both say "somebody in `otherIds` took part", but the `OR` spelling
+ * compiles to one correlated subquery *per id*, so a caller with a long
+ * participant list turns a write into an N-subquery scan. The shape here is
+ * constant no matter how long the list is.
+ */
+export function sharedNonGroupExpenseWithAny(viewerId: string, otherIds: string[]) {
+  return {
+    groupId: null,
+    AND: [
+      participatesInExpense(viewerId),
+      { OR: [{ paidById: { in: otherIds } }, { shares: { some: { userId: { in: otherIds } } } }] },
+    ],
   };
 }

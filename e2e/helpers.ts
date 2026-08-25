@@ -86,12 +86,17 @@ export async function trpcQuery(ctx: Awaited<ReturnType<typeof request.newContex
 }
 
 /**
- * Extract the first result from a tRPC batch response.
+ * Extract the result from a tRPC response, batched query or mutation.
+ *
+ * A batched query replies as an array (`body[0].result`) and a mutation as a
+ * bare object (`body.result`). Reading only the first shape silently returns
+ * undefined for every mutation, which surfaces as a confusing assertion failure
+ * rather than an error.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function trpcResult(res: { json: () => Promise<any> }): Promise<any> {
   const body = await res.json();
-  return body[0]?.result?.data?.json;
+  return body?.result?.data?.json ?? body?.[0]?.result?.data?.json;
 }
 
 /**

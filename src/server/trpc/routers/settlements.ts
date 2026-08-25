@@ -1,8 +1,13 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
-import { createTRPCRouter, groupMemberProcedure } from '../init';
+import { createTRPCRouter, groupMemberProcedure, ledgerScopeProcedure, scopeGroupId } from '../init';
 import { getExchangeRate, convertCents } from '../../lib/exchange-rates';
 import { MAX_MONEY_CENTS } from '@/lib/money';
+import { assertDirectParticipants } from '../../lib/friend-connections';
+
+// Both scopes refuse this, for different reasons: inside a group only an owner
+// or admin may record someone else's payment, and outside one nobody may.
+const SELF_PAYMENTS_ONLY = 'You can only record payments from yourself';
 
 export const settlementsRouter = createTRPCRouter({
   list: groupMemberProcedure
@@ -34,10 +39,18 @@ export const settlementsRouter = createTRPCRouter({
       return { items, nextCursor };
     }),
 
-  create: groupMemberProcedure
+  /**
+   * Record a payment.
+   *
+   * With no `groupId` this settles the **direct** balance with that person and
+   * nothing else: a group's own balances come from `balance-calculator.ts`
+   * filtered to that group, so a `groupId: null` row can never clear a debt
+   * that arose inside a group. It does move the cross-group figure the Friends
+   * view shows, which is what that number is for.
+   */
+  create: ledgerScopeProcedure
     .input(
       z.object({
-        groupId: z.string(),
         fromId: z.string().optional(),
         toId: z.string(),
         amount: z.number().int().positive().max(MAX_MONEY_CENTS),
@@ -52,14 +65,10 @@ export const settlementsRouter = createTRPCRouter({
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      const scope = ctx.scope;
       const effectiveFromId = input.fromId ?? ctx.user.id;
 
-      // Block settlements on archived groups
-      const group = await ctx.db.group.findUnique({
-        where: { id: input.groupId },
-        select: { archivedAt: true, currency: true },
-      });
-      if (group?.archivedAt) {
+      if (scope.kind === 'group' && scope.group.archivedAt) {
         throw new TRPCError({
           code: 'BAD_REQUEST',
           message: 'Cannot create settlements in an archived group',
@@ -74,54 +83,71 @@ export const settlementsRouter = createTRPCRouter({
         });
       }
 
-      // Security: non-admin members can only create settlements from themselves
-      if (ctx.membership.role === 'MEMBER' && input.fromId && input.fromId !== ctx.user.id) {
-        throw new TRPCError({
-          code: 'FORBIDDEN',
-          message: 'You can only record payments from yourself',
-        });
-      }
-
-      // Validate both fromId and toId are members of the group
-      const memberCount = await ctx.db.groupMember.count({
-        where: {
-          groupId: input.groupId,
-          userId: { in: [effectiveFromId, input.toId] },
-        },
-      });
-      if (memberCount < (effectiveFromId === input.toId ? 1 : 2)) {
-        throw new TRPCError({
-          code: 'BAD_REQUEST',
-          message: 'Both the payer and recipient must be members of this group',
-        });
-      }
-
-      // Currency conversion: compute base currency amount if currencies differ
-      const groupCurrency = group?.currency ?? 'USD';
-      let exchangeRate: number | null = null;
-      let baseCurrencyAmount: number | null = null;
-
-      if (input.currency.toUpperCase() !== groupCurrency.toUpperCase()) {
-        if (input.exchangeRate) {
-          exchangeRate = input.exchangeRate;
-        } else {
-          exchangeRate = await getExchangeRate(input.currency, groupCurrency);
-        }
-
-        if (exchangeRate === null) {
+      if (scope.kind === 'group') {
+        // Security: non-admin members can only create settlements from themselves
+        if (scope.membership.role === 'MEMBER' && input.fromId && input.fromId !== ctx.user.id) {
           throw new TRPCError({
-            code: 'BAD_REQUEST',
-            message: 'Could not fetch exchange rate. Please provide a manual rate or try again.',
+            code: 'FORBIDDEN',
+            message: SELF_PAYMENTS_ONLY,
           });
         }
 
-        baseCurrencyAmount = convertCents(input.amount, exchangeRate);
+        // Validate both fromId and toId are members of the group
+        const memberCount = await ctx.db.groupMember.count({
+          where: {
+            groupId: scope.groupId,
+            userId: { in: [effectiveFromId, input.toId] },
+          },
+        });
+        if (memberCount < 2) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: 'Both the payer and recipient must be members of this group',
+          });
+        }
+      } else {
+        // The group version lets an owner or admin record a payment on someone
+        // else's behalf. Outside a group nobody holds that authority, so a
+        // direct settlement can only ever be one the viewer made.
+        if (input.fromId && input.fromId !== ctx.user.id) {
+          throw new TRPCError({
+            code: 'FORBIDDEN',
+            message: SELF_PAYMENTS_ONLY,
+          });
+        }
+        await assertDirectParticipants(ctx.db, ctx.user.id, [effectiveFromId, input.toId]);
+      }
+
+      // Currency conversion: compute base currency amount if currencies differ.
+      // A direct settlement has no group currency to anchor to, so like a direct
+      // expense it stays denominated in the currency it was entered in.
+      let exchangeRate: number | null = null;
+      let baseCurrencyAmount: number | null = null;
+
+      if (scope.kind === 'group') {
+        const groupCurrency = scope.group.currency;
+        if (input.currency.toUpperCase() !== groupCurrency.toUpperCase()) {
+          if (input.exchangeRate) {
+            exchangeRate = input.exchangeRate;
+          } else {
+            exchangeRate = await getExchangeRate(input.currency, groupCurrency);
+          }
+
+          if (exchangeRate === null) {
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message: 'Could not fetch exchange rate. Please provide a manual rate or try again.',
+            });
+          }
+
+          baseCurrencyAmount = convertCents(input.amount, exchangeRate);
+        }
       }
 
       const settlement = await ctx.db.$transaction(async (tx) => {
         const created = await tx.settlement.create({
           data: {
-            groupId: input.groupId,
+            groupId: scopeGroupId(scope),
             fromId: effectiveFromId,
             toId: input.toId,
             amount: input.amount,
@@ -134,7 +160,7 @@ export const settlementsRouter = createTRPCRouter({
 
         await tx.activityLog.create({
           data: {
-            groupId: input.groupId,
+            groupId: scopeGroupId(scope),
             userId: ctx.user.id,
             type: 'SETTLEMENT_CREATED',
             entityId: created.id,
