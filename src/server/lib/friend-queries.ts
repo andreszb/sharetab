@@ -25,10 +25,24 @@ export function sharedNonGroupExpense(viewerId: string, otherId: string) {
   };
 }
 
-/** A group membership held by `otherId` in a group the viewer is also in. */
+/**
+ * A group membership held by `otherId` in a live group the viewer is also in.
+ *
+ * Archived groups are excluded because the friends list and the ledger both
+ * exclude them. Counting one here would authorize a friend who then appears
+ * nowhere and always reads zero.
+ */
 export function sharedGroupMembership(viewerId: string, otherId: string) {
   return {
     userId: otherId,
-    group: { members: { some: { userId: viewerId } } },
+    group: { members: { some: { userId: viewerId } }, archivedAt: null },
+  };
+}
+
+/** Everyone other than the viewer in the viewer's live groups. */
+export function groupCoMembers(viewerId: string) {
+  return {
+    group: { members: { some: { userId: viewerId } }, archivedAt: null },
+    NOT: { userId: viewerId },
   };
 }

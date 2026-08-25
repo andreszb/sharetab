@@ -6,6 +6,10 @@ import {
   evaluateInviteResponse,
   evaluateInviteResend,
   evaluateAddByEmail,
+  primaryFriendship,
+  incomingFriendship,
+  outgoingFriendship,
+  canViewAmountsFor,
   type FriendshipRow,
 } from './friendship-policy';
 
@@ -209,5 +213,99 @@ describe('evaluateAddByEmail', () => {
     // caller creates a new row in her direction; the stale one is untouched.
     const incoming: FriendshipRow = { requesterId: 'bob', addresseeId: 'alice', status: 'REJECTED' };
     expect(evaluateAddByEmail({ viewerId: 'alice', target, existing: [incoming] })).toEqual({ ok: true });
+  });
+});
+
+// ── resolving a pair that has a row in each direction ─────────────────────
+
+describe('primaryFriendship', () => {
+  const sentByAlice = (status: FriendshipRow['status']): FriendshipRow => ({
+    requesterId: 'alice',
+    addresseeId: 'bob',
+    status,
+  });
+  const sentByBob = (status: FriendshipRow['status']): FriendshipRow => ({
+    requesterId: 'bob',
+    addresseeId: 'alice',
+    status,
+  });
+
+  test('returns null when the viewer is party to nothing', () => {
+    expect(primaryFriendship('carol', [sentByAlice('PENDING')])).toBeNull();
+    expect(primaryFriendship('alice', [])).toBeNull();
+  });
+
+  test('an accepted row outranks a pending one', () => {
+    expect(primaryFriendship('alice', [sentByAlice('PENDING'), sentByBob('ACCEPTED')])).toEqual(sentByBob('ACCEPTED'));
+  });
+
+  test('an answerable invite outranks one the viewer is waiting on', () => {
+    // Alice can do something about Bob's invite; her own she can only wait on.
+    expect(primaryFriendship('alice', [sentByAlice('PENDING'), sentByBob('PENDING')])).toEqual(sentByBob('PENDING'));
+  });
+
+  test('a live invite outranks a rejected one', () => {
+    expect(primaryFriendship('alice', [sentByBob('REJECTED'), sentByAlice('PENDING')])).toEqual(sentByAlice('PENDING'));
+  });
+
+  test('the answer does not depend on row order', () => {
+    const rows = [sentByAlice('PENDING'), sentByBob('REJECTED')];
+    expect(primaryFriendship('alice', rows)).toEqual(primaryFriendship('alice', [...rows].reverse()));
+  });
+
+  test('two equally ranked rows resolve to the same one either way round', () => {
+    const rows = [sentByAlice('REJECTED'), sentByBob('REJECTED')];
+    expect(primaryFriendship('alice', rows)).toEqual(primaryFriendship('alice', [...rows].reverse()));
+  });
+
+  test('preserves extra fields on the row it picks', () => {
+    // The router needs the row's id to update it.
+    const rows = [{ ...sentByBob('PENDING'), id: 'row-1' }];
+    expect(primaryFriendship('alice', rows)?.id).toBe('row-1');
+  });
+});
+
+describe('incomingFriendship / outgoingFriendship', () => {
+  const rows: FriendshipRow[] = [
+    { requesterId: 'alice', addresseeId: 'bob', status: 'REJECTED' },
+    { requesterId: 'bob', addresseeId: 'alice', status: 'PENDING' },
+  ];
+
+  test('each side picks its own row, not whichever came first', () => {
+    expect(incomingFriendship('alice', rows)).toEqual(rows[1]);
+    expect(outgoingFriendship('alice', rows)).toEqual(rows[0]);
+  });
+
+  test('null when there is no row in that direction', () => {
+    expect(incomingFriendship('alice', [rows[0]!])).toBeNull();
+    expect(outgoingFriendship('alice', [rows[1]!])).toBeNull();
+  });
+});
+
+// ── the combined visibility rule ──────────────────────────────────────────
+
+describe('canViewAmountsFor', () => {
+  const pendingIncoming: FriendshipRow = { requesterId: 'bob', addresseeId: 'alice', status: 'PENDING' };
+
+  test('a pending addressee is blacked out', () => {
+    expect(canViewAmountsFor('alice', [pendingIncoming], false)).toBe(false);
+  });
+
+  test('shared history overrides the blackout', () => {
+    expect(canViewAmountsFor('alice', [pendingIncoming], true)).toBe(true);
+  });
+
+  test('shared history alone is enough, with no row at all', () => {
+    expect(canViewAmountsFor('alice', [], true)).toBe(true);
+  });
+
+  test('no row and no history reveals nothing', () => {
+    expect(canViewAmountsFor('alice', [], false)).toBe(false);
+  });
+
+  test('any qualifying row grants visibility', () => {
+    // Alice's own outgoing invite lets her see, even while Bob's to her pends.
+    const outgoing: FriendshipRow = { requesterId: 'alice', addresseeId: 'bob', status: 'PENDING' };
+    expect(canViewAmountsFor('alice', [pendingIncoming, outgoing], false)).toBe(true);
   });
 });

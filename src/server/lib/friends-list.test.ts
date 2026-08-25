@@ -27,19 +27,40 @@ const build = (input: Partial<Parameters<typeof buildFriendsList>[0]>) =>
 describe('sources', () => {
   test('an explicit friendship is listed', () => {
     expect(build({ friendships: [outgoing('bob', 'ACCEPTED')] })).toEqual([
-      { userId: 'bob', status: 'ACCEPTED', direction: 'outgoing', canViewAmounts: true, sources: ['friendship'] },
+      {
+        userId: 'bob',
+        status: 'ACCEPTED',
+        direction: 'outgoing',
+        canViewAmounts: true,
+        actions: [],
+        sources: ['friendship'],
+      },
     ]);
   });
 
   test('a group co-member with no row is listed as implicit', () => {
     expect(build({ groupCoMemberIds: ['bob'] })).toEqual([
-      { userId: 'bob', status: 'IMPLICIT', direction: null, canViewAmounts: true, sources: ['group'] },
+      {
+        userId: 'bob',
+        status: 'IMPLICIT',
+        direction: null,
+        canViewAmounts: true,
+        actions: [],
+        sources: ['group'],
+      },
     ]);
   });
 
   test('a non-group expense co-participant with no row is listed as implicit', () => {
     expect(build({ expenseCoParticipantIds: ['bob'] })).toEqual([
-      { userId: 'bob', status: 'IMPLICIT', direction: null, canViewAmounts: true, sources: ['expense'] },
+      {
+        userId: 'bob',
+        status: 'IMPLICIT',
+        direction: null,
+        canViewAmounts: true,
+        actions: [],
+        sources: ['expense'],
+      },
     ]);
   });
 
@@ -136,5 +157,60 @@ describe('ordering', () => {
   test('sorted by userId, so the output is stable', () => {
     const list = build({ friendships: [outgoing('carol'), outgoing('alice')], groupCoMemberIds: ['bob'] });
     expect(list.map((f) => f.userId)).toEqual(['alice', 'bob', 'carol']);
+  });
+});
+
+// ── both directions ───────────────────────────────────────────────────────
+//
+// Two rows for one pair are legal: the unique constraint is on the ordered
+// pair, and someone may invite a person whose earlier invite they rejected.
+// The listed status must not depend on which row the query returned first.
+
+describe('a pair with a row in each direction', () => {
+  const stale = incoming('bob', 'REJECTED');
+  const live = outgoing('bob', 'PENDING');
+
+  test('collapses to a single entry', () => {
+    expect(build({ friendships: [stale, live] })).toHaveLength(1);
+  });
+
+  test('reports the same entry whichever order the rows arrive in', () => {
+    expect(build({ friendships: [stale, live] })).toEqual(build({ friendships: [live, stale] }));
+  });
+
+  test('the live invite wins over the dead one', () => {
+    expect(build({ friendships: [stale, live] })[0]).toMatchObject({
+      status: 'PENDING',
+      direction: 'outgoing',
+    });
+  });
+
+  test('an accepted row wins over anything else', () => {
+    const accepted = incoming('bob', 'ACCEPTED');
+    expect(build({ friendships: [live, accepted] })[0]).toMatchObject({ status: 'ACCEPTED' });
+  });
+
+  test('an invite the viewer can answer beats one they are only waiting on', () => {
+    const answerable = incoming('bob', 'PENDING');
+    expect(build({ friendships: [live, answerable] })[0]).toMatchObject({
+      direction: 'incoming',
+      actions: ['accept', 'reject'],
+    });
+  });
+});
+
+// ── actions ───────────────────────────────────────────────────────────────
+
+describe('actions', () => {
+  test('an incoming pending invite offers accept and reject', () => {
+    expect(build({ friendships: [incoming('bob')] })[0]?.actions).toEqual(['accept', 'reject']);
+  });
+
+  test("the viewer's own rejected invite offers resend", () => {
+    expect(build({ friendships: [outgoing('bob', 'REJECTED')] })[0]?.actions).toEqual(['resend']);
+  });
+
+  test('an implicit friend has nothing to act on', () => {
+    expect(build({ groupCoMemberIds: ['bob'] })[0]?.actions).toEqual([]);
   });
 });

@@ -338,19 +338,20 @@ Roll out in two steps: ship `OIDC_ISSUER`/`OIDC_CLIENT_ID`/`OIDC_CLIENT_SECRET` 
 
 ### Other
 
-| Variable                  | Default                 | Description                                                              |
-| ------------------------- | ----------------------- | ------------------------------------------------------------------------ |
-| `NEXTAUTH_URL`            | `http://localhost:3000` | Public URL of your instance.                                             |
-| `AUTH_TRUST_HOST`         | `false`                 | Set to `true` when running on a local network or behind a reverse proxy. |
-| `DB_USER`                 | `sharetab`              | PostgreSQL username (Docker bundled DB).                                 |
-| `DB_PASSWORD`             | `sharetab`              | PostgreSQL password (Docker bundled DB).                                 |
-| `DB_NAME`                 | `sharetab`              | PostgreSQL database name (Docker bundled DB).                            |
-| `UPLOAD_DIR`              | `./uploads`             | Directory for receipt image uploads.                                     |
-| `MAX_UPLOAD_SIZE_MB`      | `10`                    | Maximum upload file size.                                                |
-| `AUTH_RATE_LIMIT_MAX`     | `5`                     | Max login attempts per IP per hour.                                      |
-| `REGISTER_RATE_LIMIT_MAX` | `10`                    | Max registration attempts per IP per hour.                               |
-| `GUEST_RATE_LIMIT_MAX`    | `10`                    | Max guest split creations per IP per hour.                               |
-| `LOG_LEVEL`               | `info`                  | Logging verbosity: `debug`, `info`, `warn`, or `error`.                  |
+| Variable                       | Default                 | Description                                                              |
+| ------------------------------ | ----------------------- | ------------------------------------------------------------------------ |
+| `NEXTAUTH_URL`                 | `http://localhost:3000` | Public URL of your instance.                                             |
+| `AUTH_TRUST_HOST`              | `false`                 | Set to `true` when running on a local network or behind a reverse proxy. |
+| `DB_USER`                      | `sharetab`              | PostgreSQL username (Docker bundled DB).                                 |
+| `DB_PASSWORD`                  | `sharetab`              | PostgreSQL password (Docker bundled DB).                                 |
+| `DB_NAME`                      | `sharetab`              | PostgreSQL database name (Docker bundled DB).                            |
+| `UPLOAD_DIR`                   | `./uploads`             | Directory for receipt image uploads.                                     |
+| `MAX_UPLOAD_SIZE_MB`           | `10`                    | Maximum upload file size.                                                |
+| `AUTH_RATE_LIMIT_MAX`          | `5`                     | Max login attempts per IP per hour.                                      |
+| `REGISTER_RATE_LIMIT_MAX`      | `10`                    | Max registration attempts per IP per hour.                               |
+| `GUEST_RATE_LIMIT_MAX`         | `10`                    | Max guest split creations per IP per hour.                               |
+| `FRIEND_INVITE_RATE_LIMIT_MAX` | `20`                    | Max friend invites sent per user per hour.                               |
+| `LOG_LEVEL`                    | `info`                  | Logging verbosity: `debug`, `info`, `warn`, or `error`.                  |
 
 ## Tech Stack
 

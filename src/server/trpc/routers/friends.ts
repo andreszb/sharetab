@@ -3,27 +3,21 @@ import { TRPCError } from '@trpc/server';
 import { createTRPCRouter, friendProcedure, protectedProcedure } from '../init';
 import { checkRateLimit, parsePositiveInt } from '../../lib/rate-limit';
 import { buildFriendsList } from '../../lib/friends-list';
+import { createPlaceholderUser } from '../../lib/placeholder-user';
 import { loadUserSummaries, loadViewerLedger } from '../../lib/friend-ledger';
 import { attributeExpense, attributeSettlement, computePairwiseBalances } from '../../lib/pairwise-balance-calculator';
 import {
   evaluateAddByEmail,
   evaluateInviteResend,
   evaluateInviteResponse,
+  incomingFriendship,
+  outgoingFriendship,
   type AddFriendDenyReason,
   type FriendshipDenyReason,
 } from '../../lib/friendship-policy';
-import { participatesInExpense } from '../../lib/friend-queries';
+import { groupCoMembers, participatesInExpense } from '../../lib/friend-queries';
 
 const INVITE_WINDOW_MS = 60 * 60 * 1000;
-
-/**
- * Invites are rate limited because `addByEmail` is an email-existence oracle:
- * it can only match a registered address, so an unbounded caller could walk a
- * list and learn who has an account here.
- */
-function inviteLimit() {
-  return parsePositiveInt(process.env.FRIEND_INVITE_RATE_LIMIT_MAX, 20);
-}
 
 const ADD_FRIEND_ERRORS: Record<
   AddFriendDenyReason,
@@ -54,16 +48,13 @@ export const friendsRouter = createTRPCRouter({
   list: protectedProcedure.query(async ({ ctx }) => {
     const viewerId = ctx.user.id;
 
-    const [friendships, groupCoMembers, directExpenses] = await Promise.all([
+    const [friendships, coMembers, directExpenses] = await Promise.all([
       ctx.db.friendship.findMany({
         where: { OR: [{ requesterId: viewerId }, { addresseeId: viewerId }] },
         select: { requesterId: true, addresseeId: true, status: true },
       }),
       ctx.db.groupMember.findMany({
-        where: {
-          group: { members: { some: { userId: viewerId } }, archivedAt: null },
-          NOT: { userId: viewerId },
-        },
+        where: groupCoMembers(viewerId),
         select: { userId: true },
       }),
       ctx.db.expense.findMany({
@@ -75,7 +66,7 @@ export const friendsRouter = createTRPCRouter({
     const entries = buildFriendsList({
       viewerId,
       friendships,
-      groupCoMemberIds: groupCoMembers.map((member) => member.userId),
+      groupCoMemberIds: coMembers.map((member) => member.userId),
       expenseCoParticipantIds: directExpenses.flatMap((expense) => [
         expense.paidById,
         ...expense.shares.map((share) => share.userId),
@@ -108,14 +99,24 @@ export const friendsRouter = createTRPCRouter({
   }),
 
   addByEmail: protectedProcedure.input(z.object({ email: z.string().email() })).mutation(async ({ ctx, input }) => {
-    const limit = checkRateLimit(`friend-invite:${ctx.user.id}`, inviteLimit(), INVITE_WINDOW_MS);
+    // Rate limited because addByEmail is an email-existence oracle: it can only
+    // match a registered address, so an unbounded caller could walk a list and
+    // learn who holds an account here.
+    const limit = checkRateLimit(
+      `friend-invite:${ctx.user.id}`,
+      parsePositiveInt(process.env.FRIEND_INVITE_RATE_LIMIT_MAX, 20),
+      INVITE_WINDOW_MS,
+    );
     if (!limit.allowed) {
       throw new TRPCError({ code: 'TOO_MANY_REQUESTS', message: 'Too many invites — try again later' });
     }
 
-    const email = input.email.trim().toLowerCase();
-    const target = await ctx.db.user.findFirst({
-      where: { email: { equals: email, mode: 'insensitive' } },
+    // Exact match, because that is what sign-in does — auth.ts looks the address
+    // up verbatim. Matching case-insensitively here would let someone befriend
+    // an account that cannot log in with the address they typed, and would be
+    // ambiguous whenever two such accounts exist.
+    const target = await ctx.db.user.findUnique({
+      where: { email: input.email.trim() },
       select: { id: true, isPlaceholder: true, suspendedAt: true },
     });
     if (!target) {
@@ -154,17 +155,9 @@ export const friendsRouter = createTRPCRouter({
   addPlaceholder: protectedProcedure
     .input(z.object({ name: z.string().min(1).max(100) }))
     .mutation(async ({ ctx, input }) => {
-      const { randomUUID } = await import('crypto');
-
-      const placeholder = await ctx.db.user.create({
-        data: {
-          email: `placeholder-${randomUUID()}@placeholder.local`,
-          name: input.name,
-          isPlaceholder: true,
-          placeholderName: input.name,
-          createdByUserId: ctx.user.id,
-        },
-        select: { id: true, name: true },
+      const placeholder = await createPlaceholderUser(ctx.db, {
+        name: input.name,
+        createdByUserId: ctx.user.id,
       });
 
       await ctx.db.friendship.create({
@@ -182,15 +175,18 @@ export const friendsRouter = createTRPCRouter({
   respondToInvite: friendProcedure
     .input(z.object({ response: z.enum(['accept', 'reject']) }))
     .mutation(async ({ ctx, input }) => {
-      if (!ctx.friendship) {
+      // Specifically the row addressed to the viewer. If they also sent an
+      // invite of their own, that one is not theirs to answer.
+      const invite = incomingFriendship(ctx.user.id, ctx.friendships);
+      if (!invite) {
         throw new TRPCError({ code: 'NOT_FOUND', message: 'No invite from this person' });
       }
 
-      const decision = evaluateInviteResponse(ctx.user.id, ctx.friendship, input.response);
+      const decision = evaluateInviteResponse(ctx.user.id, invite, input.response);
       if (!decision.ok) throw new TRPCError(FRIENDSHIP_ERRORS[decision.reason]);
 
       await ctx.db.friendship.update({
-        where: { id: ctx.friendship.id },
+        where: { id: invite.id },
         data: { status: decision.status, respondedAt: new Date() },
       });
 
@@ -198,15 +194,16 @@ export const friendsRouter = createTRPCRouter({
     }),
 
   resendInvite: friendProcedure.mutation(async ({ ctx }) => {
-    if (!ctx.friendship) {
+    const invite = outgoingFriendship(ctx.user.id, ctx.friendships);
+    if (!invite) {
       throw new TRPCError({ code: 'NOT_FOUND', message: 'No invite to this person' });
     }
 
-    const decision = evaluateInviteResend(ctx.user.id, ctx.friendship);
+    const decision = evaluateInviteResend(ctx.user.id, invite);
     if (!decision.ok) throw new TRPCError(FRIENDSHIP_ERRORS[decision.reason]);
 
     await ctx.db.friendship.update({
-      where: { id: ctx.friendship.id },
+      where: { id: invite.id },
       data: { status: decision.status, respondedAt: null },
     });
 
@@ -231,14 +228,22 @@ export const friendsRouter = createTRPCRouter({
    * Every row that moved the balance with this one friend, newest first.
    *
    * Each row's `delta` comes from the same attribution the balance is folded
-   * from, so the rows on screen always add up to the total above them.
+   * from, so the rows add up to `net` — but only when the list is complete.
+   * Past `limit` the response says `truncated`, and a caller that sums the
+   * rows it received will not reach `net`.
    */
   getLedger: friendProcedure
     .input(z.object({ limit: z.number().int().min(1).max(200).default(50) }))
     .query(async ({ ctx, input }) => {
       const ledger = await loadViewerLedger(ctx.db, ctx.user.id);
       if (!ctx.canViewAmounts) {
-        return { entries: [], net: null, displayCurrency: ledger.displayCurrency, ratesUnavailable: false };
+        return {
+          entries: [],
+          truncated: false,
+          net: null,
+          displayCurrency: ledger.displayCurrency,
+          ratesUnavailable: false,
+        };
       }
 
       const friendId = input.friendId;
@@ -283,6 +288,7 @@ export const friendsRouter = createTRPCRouter({
 
       return {
         entries: entries.slice(0, input.limit),
+        truncated: entries.length > input.limit,
         net: entries.reduce((total, entry) => total + entry.delta, 0),
         displayCurrency: ledger.displayCurrency,
         ratesUnavailable: ledger.ratesUnavailable,

@@ -6,7 +6,7 @@ import { auth } from '../auth';
 import { db } from '../db';
 import { logger } from '../lib/logger';
 import { verifyAndParse } from '../lib/signed-cookie';
-import { canViewFriendAmounts, type FriendshipRow } from '../lib/friendship-policy';
+import { canViewAmountsFor, primaryFriendship } from '../lib/friendship-policy';
 import { sharedGroupMembership, sharedNonGroupExpense } from '../lib/friend-queries';
 
 const IMPERSONATE_COOKIE = 'sharetab-impersonate';
@@ -154,8 +154,11 @@ export const friendProcedure = protectedProcedure
       throw new TRPCError({ code: 'BAD_REQUEST', message: 'Cannot act on yourself as a friend' });
     }
 
-    const [friendship, groupTie, expenseTie] = await Promise.all([
-      ctx.db.friendship.findFirst({
+    const [friendships, groupTie, expenseTie] = await Promise.all([
+      // Both directions can hold a row, so this must be findMany: findFirst
+      // would pick one of the two arbitrarily and, say, hide a live invite
+      // behind a stale rejected one.
+      ctx.db.friendship.findMany({
         where: {
           OR: [
             { requesterId: ctx.user.id, addresseeId: input.friendId },
@@ -173,13 +176,18 @@ export const friendProcedure = protectedProcedure
       }),
     ]);
 
-    if (!friendship && !groupTie && !expenseTie) {
+    if (friendships.length === 0 && !groupTie && !expenseTie) {
       throw new TRPCError({ code: 'FORBIDDEN', message: 'Not connected to this user' });
     }
 
     const sharesHistory = groupTie !== null || expenseTie !== null;
-    const canViewAmounts =
-      sharesHistory || (friendship ? canViewFriendAmounts(ctx.user.id, friendship as FriendshipRow) : false);
 
-    return next({ ctx: { ...ctx, friendship, canViewAmounts } });
+    return next({
+      ctx: {
+        ...ctx,
+        friendships,
+        friendship: primaryFriendship(ctx.user.id, friendships),
+        canViewAmounts: canViewAmountsFor(ctx.user.id, friendships, sharesHistory),
+      },
+    });
   });

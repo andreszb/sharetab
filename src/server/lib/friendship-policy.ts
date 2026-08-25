@@ -143,3 +143,52 @@ export function evaluateAddByEmail(input: {
 
   return { ok: true };
 }
+
+/**
+ * Which row governs a pair when both directions have one.
+ *
+ * Two rows can legitimately exist: the unique constraint is on the ordered
+ * pair, and `evaluateAddByEmail` deliberately lets someone invite a person
+ * whose earlier invite they rejected. Picking with `findFirst` would then be a
+ * coin toss, so callers must resolve the pair through here instead.
+ *
+ * An accepted row always wins. Failing that, an invite the viewer can act on
+ * beats one they are only waiting on, and a live invite beats a dead one.
+ */
+export function primaryFriendship<T extends FriendshipRow>(viewerId: string, rows: T[]): T | null {
+  const relevant = rows.filter((row) => friendshipRole(viewerId, row) !== null);
+  if (relevant.length === 0) return null;
+
+  const rank = (row: T) => {
+    if (row.status === 'ACCEPTED') return 3;
+    if (row.status === 'PENDING') return friendshipRole(viewerId, row) === 'addressee' ? 2 : 1;
+    return 0;
+  };
+
+  return relevant.reduce((best, row) => {
+    if (rank(row) !== rank(best)) return rank(row) > rank(best) ? row : best;
+    // Stable tiebreak so two equally ranked rows never alternate between calls.
+    return row.requesterId.localeCompare(best.requesterId) < 0 ? row : best;
+  });
+}
+
+/** The invite awaiting the viewer's answer, if any. */
+export function incomingFriendship<T extends FriendshipRow>(viewerId: string, rows: T[]): T | null {
+  return rows.find((row) => row.addresseeId === viewerId) ?? null;
+}
+
+/** The invite the viewer sent, if any. */
+export function outgoingFriendship<T extends FriendshipRow>(viewerId: string, rows: T[]): T | null {
+  return rows.find((row) => row.requesterId === viewerId) ?? null;
+}
+
+/**
+ * The full amount-visibility rule, and the only place it should be written.
+ *
+ * Beyond the one-sided invite rule, sharing a group or a direct expense with
+ * someone reveals the figures regardless: they can already read them there, so
+ * withholding them on the friends surface would be theatre rather than privacy.
+ */
+export function canViewAmountsFor(viewerId: string, rows: FriendshipRow[], sharesHistory: boolean): boolean {
+  return sharesHistory || rows.some((row) => canViewFriendAmounts(viewerId, row));
+}

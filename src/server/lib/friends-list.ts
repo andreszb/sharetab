@@ -14,7 +14,15 @@
  * Pure: the caller runs the three queries and passes the ids in.
  */
 
-import { canViewFriendAmounts, friendshipRole, type FriendshipRow, type FriendshipStatus } from './friendship-policy';
+import {
+  availableFriendshipActions,
+  canViewAmountsFor,
+  friendshipRole,
+  primaryFriendship,
+  type FriendshipAction,
+  type FriendshipRow,
+  type FriendshipStatus,
+} from './friendship-policy';
 
 export type FriendSource = 'friendship' | 'group' | 'expense';
 
@@ -27,6 +35,8 @@ export type FriendListEntry = {
   /** Who sent the invite. null for a friend derived from shared history. */
   direction: 'outgoing' | 'incoming' | null;
   canViewAmounts: boolean;
+  /** What the viewer can do about this friendship right now. */
+  actions: FriendshipAction[];
   /** Every source this person was reached by, in the order listed above. */
   sources: FriendSource[];
 };
@@ -39,22 +49,26 @@ export function buildFriendsList(input: {
 }): FriendListEntry[] {
   const { viewerId, friendships, groupCoMemberIds, expenseCoParticipantIds } = input;
 
-  const rows = new Map<string, FriendshipRow>();
+  // Group by counterparty first: both directions can hold a row, and taking
+  // whichever the query happened to return last would make the listed status
+  // depend on row order.
+  const byCounterparty = new Map<string, FriendshipRow[]>();
   for (const row of friendships) {
     const role = friendshipRole(viewerId, row);
     if (role === null) continue;
     const otherId = role === 'requester' ? row.addresseeId : row.requesterId;
     // A self-row is not a friendship, and would otherwise list the viewer.
     if (otherId === viewerId) continue;
-    rows.set(otherId, row);
+    byCounterparty.set(otherId, [...(byCounterparty.get(otherId) ?? []), row]);
   }
 
   const inGroup = new Set(groupCoMemberIds.filter((id) => id !== viewerId));
   const inExpense = new Set(expenseCoParticipantIds.filter((id) => id !== viewerId));
 
   const entries: FriendListEntry[] = [];
-  for (const userId of new Set([...rows.keys(), ...inGroup, ...inExpense])) {
-    const row = rows.get(userId);
+  for (const userId of new Set([...byCounterparty.keys(), ...inGroup, ...inExpense])) {
+    const rows = byCounterparty.get(userId) ?? [];
+    const row = primaryFriendship(viewerId, rows);
     const sharesHistory = inGroup.has(userId) || inExpense.has(userId);
 
     const sources: FriendSource[] = [];
@@ -66,9 +80,8 @@ export function buildFriendsList(input: {
       userId,
       status: row ? row.status : 'IMPLICIT',
       direction: row ? (friendshipRole(viewerId, row) === 'requester' ? 'outgoing' : 'incoming') : null,
-      // Shared history overrides a pending invite's blackout: these figures are
-      // already visible to both of them in the group or expense they share.
-      canViewAmounts: sharesHistory || (row ? canViewFriendAmounts(viewerId, row) : false),
+      canViewAmounts: canViewAmountsFor(viewerId, rows, sharesHistory),
+      actions: row ? availableFriendshipActions(viewerId, row) : [],
       sources,
     });
   }
