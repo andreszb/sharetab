@@ -1,0 +1,88 @@
+{
+  "title": "Freunde",
+  "subtitle": "Alle, mit denen du Ausgaben teilst — in einer Gruppe oder außerhalb.",
+  "addFriend": "Freund hinzufügen",
+  "searchPlaceholder": "Freunde suchen",
+  "noFriends": "Noch keine Freunde.",
+  "noFriendsDescription": "Füge jemanden über die E-Mail-Adresse hinzu, mit der er sich registriert hat, oder lege einen Namen für jemanden an, der ShareTab nicht nutzt.",
+  "noSearchResults": "Keine Freunde passen zu dieser Suche.",
+  "settledUp": "Alles ausgeglichen",
+  "owesYou": "Schuldet dir",
+  "youOwe": "Du schuldest",
+  "amountHidden": "Ausgeblendet",
+  "approximateRates": "Einige Beträge verwenden ungefähre Wechselkurse.",
+  "pendingTitle": "Einladungen",
+  "allTitle": "Alle Freunde",
+  "status": {
+    "pendingIncoming": "Hat dich eingeladen",
+    "pendingOutgoing": "Einladung gesendet",
+    "rejected": "Abgelehnt",
+    "placeholder": "Nicht auf ShareTab"
+  },
+  "sources": {
+    "group": "Gemeinsame Gruppe",
+    "expense": "Gemeinsame Ausgabe"
+  },
+  "actions": {
+    "accept": "Annehmen",
+    "reject": "Ablehnen",
+    "resend": "Erneut senden"
+  },
+  "add": {
+    "title": "Freund hinzufügen",
+    "description": "Lade jemanden über die E-Mail-Adresse ein, mit der er sich registriert hat, oder lege einen Namen für jemanden an, der ShareTab nicht nutzt.",
+    "byEmail": "Per E-Mail",
+    "byName": "Per Name",
+    "emailLabel": "E-Mail",
+    "emailPlaceholder": "freund@beispiel.de",
+    "nameLabel": "Name",
+    "namePlaceholder": "Alex",
+    "nameHint": "Niemand wird benachrichtigt. Das ist ein Platzhalter, mit dem du teilen und abrechnen kannst und der sich später mit einem echten Konto zusammenführen lässt.",
+    "submitEmail": "Einladung senden",
+    "submitName": "Freund hinzufügen",
+    "submitting": "Wird gespeichert…"
+  },
+  "detail": {
+    "back": "Zurück zu Freunden",
+    "notFound": "Diese Person steht nicht in deiner Freundesliste.",
+    "owesYou": "{name} schuldet dir",
+    "youOwe": "Du schuldest {name}",
+    "settled": "Mit {name} ist alles ausgeglichen",
+    "hiddenOutgoing": "Beträge bleiben verborgen, bis {name} deine Einladung annimmt.",
+    "hiddenIncoming": "Nimm die Einladung an, um Salden mit {name} zu teilen.",
+    "addExpense": "Ausgabe hinzufügen",
+    "settleUp": "Abrechnen",
+    "ledgerTitle": "Gemeinsamer Verlauf",
+    "noLedger": "Noch nichts geteilt.",
+    "truncated": "Es werden die {count} neuesten Einträge angezeigt. Der Saldo oben umfasst weiterhin alles.",
+    "direct": "Direkt",
+    "youPaid": "Du hast bezahlt",
+    "friendPaid": "{name} hat bezahlt",
+    "youSettled": "Du hast {name} bezahlt",
+    "friendSettled": "{name} hat dich bezahlt",
+    "payment": "Zahlung"
+  },
+  "expense": {
+    "title": "Neue geteilte Ausgabe",
+    "subtitle": "Außerhalb jeder Gruppe. Das verändert nur deinen Saldo mit den Personen unten.",
+    "splitWith": "Teilen mit",
+    "splitWithHint": "Du kannst alle hinzufügen, deren Saldo du bereits siehst.",
+    "you": "Du",
+    "back": "Zurück zu {name}"
+  },
+  "settle": {
+    "title": "Mit {name} abrechnen",
+    "description": "Erfasst eine Zahlung außerhalb jeder Gruppe. Salden in euren gemeinsamen Gruppen bleiben unberührt.",
+    "direction": "Zahlung",
+    "youPaid": "Du hast {name} bezahlt",
+    "friendPaid": "{name} hat dich bezahlt",
+    "friendPaidHint": "Wird stellvertretend erfasst, weil {name} ShareTab nicht nutzt.",
+    "theirPaymentHint": "{name} schuldet dir Geld. Nur diese Person kann die ausgleichende Zahlung erfassen – hier erfasst du eine Zahlung, die du geleistet hast.",
+    "amount": "Betrag",
+    "note": "Notiz",
+    "notePlaceholder": "Optional",
+    "useSuggested": "{amount} verwenden",
+    "submit": "Zahlung erfassen",
+    "submitting": "Wird erfasst…"
+  }
+}

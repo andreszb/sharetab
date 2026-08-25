@@ -77,7 +77,7 @@ export default function NewExpensePage({ params }: { params: Promise<{ groupId: 
     () =>
       group.data?.members.map((m) => ({
         id: m.user.id,
-        name: m.user.name ?? m.user.email,
+        name: m.user.placeholderName ?? m.user.name ?? m.user.email,
       })) ?? [],
     [group.data?.members],
   );

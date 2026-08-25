@@ -160,7 +160,9 @@
     "typeGroupArchived": "그룹 보관",
     "typeGroupUnarchived": "그룹 보관 해제",
     "typePlaceholderCreated": "임시 멤버 추가",
-    "typeSettlementCreated": "정산"
+    "typeSettlementCreated": "정산",
+    "typeFriendInviteSent": "친구 초대 보냄",
+    "typeFriendInviteAccepted": "친구 초대 수락"
   },
   "tools": {
     "title": "관리 도구",

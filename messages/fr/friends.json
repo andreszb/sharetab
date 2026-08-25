@@ -1,0 +1,88 @@
+{
+  "title": "Amis",
+  "subtitle": "Toutes les personnes avec qui vous partagez des dépenses, dans un groupe ou en dehors.",
+  "addFriend": "Ajouter un ami",
+  "searchPlaceholder": "Rechercher des amis",
+  "noFriends": "Aucun ami pour l'instant.",
+  "noFriendsDescription": "Ajoutez quelqu'un avec l'e-mail utilisé à l'inscription, ou ajoutez un nom pour quelqu'un qui n'utilise pas ShareTab.",
+  "noSearchResults": "Aucun ami ne correspond à cette recherche.",
+  "settledUp": "Tout est réglé",
+  "owesYou": "Vous doit",
+  "youOwe": "Vous devez",
+  "amountHidden": "Masqué",
+  "approximateRates": "Certains montants utilisent des taux de change approximatifs.",
+  "pendingTitle": "Invitations",
+  "allTitle": "Tous les amis",
+  "status": {
+    "pendingIncoming": "Vous a invité",
+    "pendingOutgoing": "Invitation envoyée",
+    "rejected": "Refusée",
+    "placeholder": "Pas sur ShareTab"
+  },
+  "sources": {
+    "group": "Groupe partagé",
+    "expense": "Dépense partagée"
+  },
+  "actions": {
+    "accept": "Accepter",
+    "reject": "Refuser",
+    "resend": "Renvoyer"
+  },
+  "add": {
+    "title": "Ajouter un ami",
+    "description": "Invitez quelqu'un avec l'e-mail utilisé à l'inscription, ou ajoutez un nom pour quelqu'un qui n'utilise pas ShareTab.",
+    "byEmail": "Par e-mail",
+    "byName": "Par nom",
+    "emailLabel": "E-mail",
+    "emailPlaceholder": "ami@exemple.com",
+    "nameLabel": "Nom",
+    "namePlaceholder": "Alex",
+    "nameHint": "Personne n'est notifié. C'est un espace réservé avec lequel vous pouvez partager des dépenses et régler des comptes, et qui pourra être fusionné plus tard avec un vrai compte.",
+    "submitEmail": "Envoyer l'invitation",
+    "submitName": "Ajouter l'ami",
+    "submitting": "Enregistrement…"
+  },
+  "detail": {
+    "back": "Retour aux amis",
+    "notFound": "Cette personne ne figure pas dans votre liste d'amis.",
+    "owesYou": "{name} vous doit",
+    "youOwe": "Vous devez à {name}",
+    "settled": "Vous êtes quittes avec {name}",
+    "hiddenOutgoing": "Les montants restent masqués jusqu'à ce que {name} accepte votre invitation.",
+    "hiddenIncoming": "Acceptez l'invitation pour partager les soldes avec {name}.",
+    "addExpense": "Ajouter une dépense",
+    "settleUp": "Régler",
+    "ledgerTitle": "Historique partagé",
+    "noLedger": "Rien de partagé pour l'instant.",
+    "truncated": "Affichage des {count} entrées les plus récentes. Le solde ci-dessus couvre toujours l'ensemble.",
+    "direct": "Direct",
+    "youPaid": "Vous avez payé",
+    "friendPaid": "{name} a payé",
+    "youSettled": "Vous avez payé {name}",
+    "friendSettled": "{name} vous a payé",
+    "payment": "Paiement"
+  },
+  "expense": {
+    "title": "Nouvelle dépense partagée",
+    "subtitle": "En dehors de tout groupe. Cela ne modifie que votre solde avec les personnes ci-dessous.",
+    "splitWith": "Partager avec",
+    "splitWithHint": "Vous pouvez ajouter toute personne dont vous voyez déjà le solde.",
+    "you": "Vous",
+    "back": "Retour à {name}"
+  },
+  "settle": {
+    "title": "Régler avec {name}",
+    "description": "Enregistre un paiement en dehors de tout groupe. Les soldes de vos groupes partagés ne sont pas affectés.",
+    "direction": "Paiement",
+    "youPaid": "Vous avez payé {name}",
+    "friendPaid": "{name} vous a payé",
+    "friendPaidHint": "Enregistré en son nom car {name} n'utilise pas ShareTab.",
+    "theirPaymentHint": "{name} vous doit de l'argent. Seule cette personne peut enregistrer le paiement qui solde la dette ; ce formulaire enregistre un paiement que vous lui avez fait.",
+    "amount": "Montant",
+    "note": "Note",
+    "notePlaceholder": "Facultatif",
+    "useSuggested": "Utiliser {amount}",
+    "submit": "Enregistrer le paiement",
+    "submitting": "Enregistrement…"
+  }
+}

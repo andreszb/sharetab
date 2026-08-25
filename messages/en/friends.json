@@ -1,0 +1,88 @@
+{
+  "title": "Friends",
+  "subtitle": "Everyone you share expenses with, in a group or outside one.",
+  "addFriend": "Add friend",
+  "searchPlaceholder": "Search friends",
+  "noFriends": "No friends yet.",
+  "noFriendsDescription": "Add someone by the email they signed up with, or add a name for someone who is not on ShareTab.",
+  "noSearchResults": "No friends match that search.",
+  "settledUp": "Settled up",
+  "owesYou": "Owes you",
+  "youOwe": "You owe",
+  "amountHidden": "Hidden",
+  "approximateRates": "Some amounts use approximate exchange rates.",
+  "pendingTitle": "Invites",
+  "allTitle": "All friends",
+  "status": {
+    "pendingIncoming": "Invited you",
+    "pendingOutgoing": "Invite sent",
+    "rejected": "Declined",
+    "placeholder": "Not on ShareTab"
+  },
+  "sources": {
+    "group": "Shared group",
+    "expense": "Shared expense"
+  },
+  "actions": {
+    "accept": "Accept",
+    "reject": "Decline",
+    "resend": "Resend"
+  },
+  "add": {
+    "title": "Add a friend",
+    "description": "Invite someone by the email they signed up with, or add a name for someone who is not on ShareTab.",
+    "byEmail": "By email",
+    "byName": "By name",
+    "emailLabel": "Email",
+    "emailPlaceholder": "friend@example.com",
+    "nameLabel": "Name",
+    "namePlaceholder": "Alex",
+    "nameHint": "Nobody is notified. This is a stand-in you can split with and settle against, and it can be merged into a real account later.",
+    "submitEmail": "Send invite",
+    "submitName": "Add friend",
+    "submitting": "Saving…"
+  },
+  "detail": {
+    "back": "Back to friends",
+    "notFound": "This person is not in your friends list.",
+    "owesYou": "{name} owes you",
+    "youOwe": "You owe {name}",
+    "settled": "You are settled up with {name}",
+    "hiddenOutgoing": "Amounts stay hidden until {name} accepts your invite.",
+    "hiddenIncoming": "Accept the invite to share balances with {name}.",
+    "addExpense": "Add expense",
+    "settleUp": "Settle up",
+    "ledgerTitle": "Shared history",
+    "noLedger": "Nothing shared yet.",
+    "truncated": "Showing the {count} most recent entries. The balance above still covers everything.",
+    "direct": "Direct",
+    "youPaid": "You paid",
+    "friendPaid": "{name} paid",
+    "youSettled": "You paid {name}",
+    "friendSettled": "{name} paid you",
+    "payment": "Payment"
+  },
+  "expense": {
+    "title": "New shared expense",
+    "subtitle": "Outside any group. This only moves your balance with the people below.",
+    "splitWith": "Split with",
+    "splitWithHint": "You can add anyone whose balance you can already see.",
+    "you": "You",
+    "back": "Back to {name}"
+  },
+  "settle": {
+    "title": "Settle up with {name}",
+    "description": "Records a payment outside any group. Balances inside your shared groups are not affected.",
+    "direction": "Payment",
+    "youPaid": "You paid {name}",
+    "friendPaid": "{name} paid you",
+    "friendPaidHint": "Recorded on their behalf because {name} is not on ShareTab.",
+    "theirPaymentHint": "{name} owes you. Only they can record the payment that clears it — this form records one you made to them.",
+    "amount": "Amount",
+    "note": "Note",
+    "notePlaceholder": "Optional",
+    "useSuggested": "Use {amount}",
+    "submit": "Record payment",
+    "submitting": "Recording…"
+  }
+}

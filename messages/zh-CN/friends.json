@@ -1,0 +1,88 @@
+{
+  "title": "好友",
+  "subtitle": "与你分摊支出的所有人，无论是否在同一群组。",
+  "addFriend": "添加好友",
+  "searchPlaceholder": "搜索好友",
+  "noFriends": "还没有好友。",
+  "noFriendsDescription": "用对方注册时的邮箱添加，或者为未使用 ShareTab 的人添加一个名字。",
+  "noSearchResults": "没有符合搜索条件的好友。",
+  "settledUp": "已结清",
+  "owesYou": "欠你",
+  "youOwe": "你欠",
+  "amountHidden": "已隐藏",
+  "approximateRates": "部分金额使用了近似汇率。",
+  "pendingTitle": "邀请",
+  "allTitle": "全部好友",
+  "status": {
+    "pendingIncoming": "邀请了你",
+    "pendingOutgoing": "邀请已发送",
+    "rejected": "已拒绝",
+    "placeholder": "未使用 ShareTab"
+  },
+  "sources": {
+    "group": "共同群组",
+    "expense": "共同支出"
+  },
+  "actions": {
+    "accept": "接受",
+    "reject": "拒绝",
+    "resend": "重新发送"
+  },
+  "add": {
+    "title": "添加好友",
+    "description": "用对方注册时的邮箱邀请，或者为未使用 ShareTab 的人添加一个名字。",
+    "byEmail": "通过邮箱",
+    "byName": "通过名字",
+    "emailLabel": "邮箱",
+    "emailPlaceholder": "friend@example.com",
+    "nameLabel": "名字",
+    "namePlaceholder": "Alex",
+    "nameHint": "不会通知任何人。这是一个占位成员，可以与其分摊和结算，之后可以合并到真实账号。",
+    "submitEmail": "发送邀请",
+    "submitName": "添加好友",
+    "submitting": "保存中…"
+  },
+  "detail": {
+    "back": "返回好友列表",
+    "notFound": "此人不在你的好友列表中。",
+    "owesYou": "{name} 欠你",
+    "youOwe": "你欠 {name}",
+    "settled": "你与 {name} 已结清",
+    "hiddenOutgoing": "在 {name} 接受邀请之前，金额将保持隐藏。",
+    "hiddenIncoming": "接受邀请后即可与 {name} 共享余额。",
+    "addExpense": "添加支出",
+    "settleUp": "结算",
+    "ledgerTitle": "共同记录",
+    "noLedger": "还没有共同记录。",
+    "truncated": "仅显示最近 {count} 条记录。上方余额仍包含全部内容。",
+    "direct": "私人",
+    "youPaid": "你支付",
+    "friendPaid": "{name} 支付",
+    "youSettled": "你付给了 {name}",
+    "friendSettled": "{name} 付给了你",
+    "payment": "付款"
+  },
+  "expense": {
+    "title": "新建共同支出",
+    "subtitle": "不属于任何群组，只会影响你与下列人员之间的余额。",
+    "splitWith": "分摊给",
+    "splitWithHint": "你可以添加任何已能查看其余额的人。",
+    "you": "你",
+    "back": "返回 {name}"
+  },
+  "settle": {
+    "title": "与 {name} 结算",
+    "description": "记录一笔群组之外的付款。共同群组内的余额不受影响。",
+    "direction": "付款",
+    "youPaid": "你付给 {name}",
+    "friendPaid": "{name} 付给你",
+    "friendPaidHint": "由于 {name} 未使用 ShareTab，将代其记录。",
+    "theirPaymentHint": "{name} 欠你钱。只有对方才能记录结清这笔欠款的付款；此表单记录的是你付给对方的款项。",
+    "amount": "金额",
+    "note": "备注",
+    "notePlaceholder": "可选",
+    "useSuggested": "使用 {amount}",
+    "submit": "记录付款",
+    "submitting": "记录中…"
+  }
+}

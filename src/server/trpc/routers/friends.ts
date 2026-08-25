@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
+import type { PrismaClient } from '@/generated/prisma/client';
 import { createTRPCRouter, friendProcedure, protectedProcedure } from '../init';
 import { checkRateLimit, parsePositiveInt } from '../../lib/rate-limit';
 import { buildFriendsList } from '../../lib/friends-list';
@@ -38,6 +39,23 @@ const FRIENDSHIP_ERRORS: Record<FriendshipDenyReason, { code: 'FORBIDDEN' | 'CON
   not_the_requester: { code: 'FORBIDDEN', message: 'Only the person who sent this can resend it' },
   already_accepted: { code: 'CONFLICT', message: 'This friendship is already accepted' },
 };
+
+/**
+ * Friend invites in the unified feed.
+ *
+ * `entityId` is the **friendship** id, which is how the addressee reaches the
+ * entry at all: `activity.getRecentActivity` selects non-group entries either
+ * by actor or by entityId, and only the actor arm would otherwise match. The
+ * row carries no `groupId` — a friendship belongs to no group by definition.
+ */
+async function writeInviteActivity(
+  db: Pick<PrismaClient, 'activityLog'>,
+  input: { type: 'FRIEND_INVITE_SENT' | 'FRIEND_INVITE_ACCEPTED'; friendshipId: string; actorId: string },
+) {
+  await db.activityLog.create({
+    data: { groupId: null, userId: input.actorId, type: input.type, entityId: input.friendshipId },
+  });
+}
 
 export const friendsRouter = createTRPCRouter({
   /**
@@ -140,8 +158,15 @@ export const friendsRouter = createTRPCRouter({
     });
     if (!decision.ok) throw new TRPCError(ADD_FRIEND_ERRORS[decision.reason]);
 
-    const friendship = await ctx.db.friendship.create({
-      data: { requesterId: ctx.user.id, addresseeId: target.id, status: 'PENDING' },
+    // One transaction, because a committed row with a failed feed entry leaves
+    // the requester holding an invite they were told had failed — the retry
+    // then answers `already_requested`, which is unrecoverable from the UI.
+    const friendship = await ctx.db.$transaction(async (tx) => {
+      const row = await tx.friendship.create({
+        data: { requesterId: ctx.user.id, addresseeId: target.id, status: 'PENDING' },
+      });
+      await writeInviteActivity(tx, { type: 'FRIEND_INVITE_SENT', friendshipId: row.id, actorId: ctx.user.id });
+      return row;
     });
 
     return { friendshipId: friendship.id, friendId: target.id, status: friendship.status };
@@ -185,9 +210,22 @@ export const friendsRouter = createTRPCRouter({
       const decision = evaluateInviteResponse(ctx.user.id, invite, input.response);
       if (!decision.ok) throw new TRPCError(FRIENDSHIP_ERRORS[decision.reason]);
 
-      await ctx.db.friendship.update({
-        where: { id: invite.id },
-        data: { status: decision.status, respondedAt: new Date() },
+      await ctx.db.$transaction(async (tx) => {
+        await tx.friendship.update({
+          where: { id: invite.id },
+          data: { status: decision.status, respondedAt: new Date() },
+        });
+
+        // Only acceptance is logged. A rejection would reach the requester
+        // through the same entityId arm the acceptance does, and telling someone
+        // they were turned down is not what this feed is for.
+        if (decision.status === 'ACCEPTED') {
+          await writeInviteActivity(tx, {
+            type: 'FRIEND_INVITE_ACCEPTED',
+            friendshipId: invite.id,
+            actorId: ctx.user.id,
+          });
+        }
       });
 
       return { status: decision.status };
@@ -202,9 +240,15 @@ export const friendsRouter = createTRPCRouter({
     const decision = evaluateInviteResend(ctx.user.id, invite);
     if (!decision.ok) throw new TRPCError(FRIENDSHIP_ERRORS[decision.reason]);
 
-    await ctx.db.friendship.update({
-      where: { id: invite.id },
-      data: { status: decision.status, respondedAt: null },
+    await ctx.db.$transaction(async (tx) => {
+      await tx.friendship.update({
+        where: { id: invite.id },
+        data: { status: decision.status, respondedAt: null },
+      });
+
+      // A resend puts a live invite in front of the addressee again, so it is
+      // the same event as the original send as far as the feed is concerned.
+      await writeInviteActivity(tx, { type: 'FRIEND_INVITE_SENT', friendshipId: invite.id, actorId: ctx.user.id });
     });
 
     return { status: decision.status };

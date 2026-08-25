@@ -46,7 +46,8 @@ export const activityRouter = createTRPCRouter({
 
   /**
    * The unified feed: everything from the viewer's groups, plus the direct
-   * expenses and settlements they take part in.
+   * expenses and settlements they take part in and the friend invites they are
+   * a party to.
    *
    * Direct entries carry no `groupId`, so membership cannot select them.
    * They are found instead by matching `ActivityLog.entityId` against the ids
@@ -65,7 +66,7 @@ export const activityRouter = createTRPCRouter({
   getRecentActivity: protectedProcedure
     .input(z.object({ limit: z.number().int().min(1).max(50).default(10) }))
     .query(async ({ ctx, input }) => {
-      const [userGroups, directExpenses, directSettlements] = await Promise.all([
+      const [userGroups, directExpenses, directSettlements, friendships] = await Promise.all([
         ctx.db.groupMember.findMany({
           where: { userId: ctx.user.id },
           select: { groupId: true },
@@ -84,10 +85,19 @@ export const activityRouter = createTRPCRouter({
           orderBy: { settledAt: 'desc' },
           take: DIRECT_ENTITY_LOOKBACK,
         }),
+        // Friend invites are the third kind of groupless entry, and the only
+        // one whose audience is not "who participates": both parties see it,
+        // but a friendship id appears in neither list above.
+        ctx.db.friendship.findMany({
+          where: { OR: [{ requesterId: ctx.user.id }, { addresseeId: ctx.user.id }] },
+          select: { id: true },
+          orderBy: { createdAt: 'desc' },
+          take: DIRECT_ENTITY_LOOKBACK,
+        }),
       ]);
 
       const groupIds = userGroups.map((g) => g.groupId);
-      const directEntityIds = [...directExpenses, ...directSettlements].map((row) => row.id);
+      const directEntityIds = [...directExpenses, ...directSettlements, ...friendships].map((row) => row.id);
 
       const items = await ctx.db.activityLog.findMany({
         where: {

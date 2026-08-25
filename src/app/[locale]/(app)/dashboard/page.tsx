@@ -11,6 +11,7 @@ import { ArrowUpRight, ArrowDownLeft, Plus, ChevronRight, TrendingUp, TrendingDo
 import Image from 'next/image';
 import { Link } from '@/i18n/navigation';
 import { getInitials, avatarColor } from '@/lib/avatar';
+import { PersonRow, PersonRowSkeleton } from '@/components/people/person-row';
 
 const GROUPS_PER_PAGE = 6;
 
@@ -23,18 +24,6 @@ function SummarySkeleton() {
     <div className="space-y-3">
       <div className="h-4 w-24 animate-pulse rounded bg-muted" />
       <div className="h-9 w-32 animate-pulse rounded bg-muted" />
-    </div>
-  );
-}
-
-function PersonRowSkeleton() {
-  return (
-    <div className="flex items-center justify-between py-2.5">
-      <div className="flex items-center gap-3">
-        <div className="h-9 w-9 animate-pulse rounded-full bg-muted" />
-        <div className="h-4 w-28 animate-pulse rounded bg-muted" />
-      </div>
-      <div className="h-4 w-16 animate-pulse rounded bg-muted" />
     </div>
   );
 }
@@ -78,29 +67,18 @@ export default function DashboardPage() {
   const visibleGroups = showAllGroups ? groups.data : groups.data?.slice(0, GROUPS_PER_PAGE);
   const hasMoreGroups = (groups.data?.length ?? 0) > GROUPS_PER_PAGE;
 
-  // Aggregate totals span all groups. When every contributing group uses
-  // the same currency, display it; with mixed currencies the unconverted
-  // sums are meaningless, so the aggregate numbers are suppressed entirely
-  // (no FX conversion is attempted) and a "mixed currencies" note is shown
-  // instead. Zero-balance groups are ignored: they contribute nothing to
-  // the totals, so an empty or settled group in another currency must not
-  // suppress otherwise-valid aggregates.
+  // The two aggregate cards are the sums of the per-person lists below them,
+  // which is what makes the pair consistent: both come from getOverallDebts,
+  // which folds every group and every direct row into the viewer's own
+  // currency server-side. They used to sum unconverted cents straight out of
+  // getDashboard and suppress themselves entirely once two currencies were in
+  // play; that suppression is gone because there is nothing left to suppress.
   //
-  // This applies only to these two aggregate cards. The per-person debt cards
-  // below come from balances.getOverallDebts, which converts to the viewer's
-  // currency server-side and needs no such guard.
-  const groupCurrencies = new Set(dashboard.data?.perGroup.filter((g) => g.balance !== 0).map((g) => g.currency) ?? []);
-  const hasMixedCurrencies = groupCurrencies.size > 1;
-  // All-settled fallback uses the ordered groups list (updatedAt desc) so
-  // the zero totals show the first *displayed* group's currency; perGroup
-  // comes from an unordered query and its index 0 is arbitrary.
-  const aggregateCurrency =
-    groupCurrencies.size === 1 ? [...groupCurrencies][0]! : (groups.data?.[0]?.currency ?? 'USD');
-
-  // Per-person debts are computed as an exact pairwise ledger and converted to
-  // the viewer's own currency server-side, so unlike the aggregate totals above
-  // they stay meaningful across groups with different currencies.
-  const debtsCurrency = overallDebts.data?.displayCurrency ?? aggregateCurrency;
+  // getDashboard still drives the per-group cards further down, where each
+  // group's own currency is the right unit and no conversion belongs.
+  const totalOwed = overallDebts.data?.owedToYou.reduce((sum, person) => sum + person.amount, 0) ?? 0;
+  const totalOwing = overallDebts.data?.youOwe.reduce((sum, person) => sum + person.amount, 0) ?? 0;
+  const debtsCurrency = overallDebts.data?.displayCurrency ?? groups.data?.[0]?.currency ?? 'USD';
 
   return (
     <div className="space-y-8">
@@ -125,14 +103,10 @@ export default function DashboardPage() {
             </div>
           </CardHeader>
           <CardContent>
-            {dashboard.data ? (
-              hasMixedCurrencies ? (
-                <span className="text-lg font-medium text-muted-foreground">{t('mixedCurrencies')}</span>
-              ) : (
-                <span className="text-3xl font-bold tracking-tight tabular-nums text-green-600 dark:text-green-400">
-                  {formatCents(dashboard.data.totalOwed, aggregateCurrency, locale)}
-                </span>
-              )
+            {overallDebts.data ? (
+              <span className="text-3xl font-bold tracking-tight tabular-nums text-green-600 dark:text-green-400">
+                {formatCents(totalOwed, debtsCurrency, locale)}
+              </span>
             ) : (
               <SummarySkeleton />
             )}
@@ -149,14 +123,10 @@ export default function DashboardPage() {
             </div>
           </CardHeader>
           <CardContent>
-            {dashboard.data ? (
-              hasMixedCurrencies ? (
-                <span className="text-lg font-medium text-muted-foreground">{t('mixedCurrencies')}</span>
-              ) : (
-                <span className="text-3xl font-bold tracking-tight tabular-nums text-red-600 dark:text-red-400">
-                  {formatCents(dashboard.data.totalOwing, aggregateCurrency, locale)}
-                </span>
-              )
+            {overallDebts.data ? (
+              <span className="text-3xl font-bold tracking-tight tabular-nums text-red-600 dark:text-red-400">
+                {formatCents(totalOwing, debtsCurrency, locale)}
+              </span>
             ) : (
               <SummarySkeleton />
             )}
@@ -192,22 +162,15 @@ export default function DashboardPage() {
             )}
             <div className="divide-y divide-border/60">
               {overallDebts.data?.owedToYou.map((person) => (
-                <div
+                <PersonRow
                   key={person.userId}
-                  className="flex items-center justify-between rounded-md px-1 py-2.5 transition-colors hover:bg-muted/50"
-                >
-                  <div className="flex items-center gap-3">
-                    <div
-                      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-medium text-white shadow-sm ${avatarColor(person.userId)}`}
-                    >
-                      {getInitials(person.userName)}
-                    </div>
-                    <span className="text-sm font-medium">{person.userName}</span>
-                  </div>
-                  <span className="text-sm font-semibold tabular-nums text-green-600 dark:text-green-400">
-                    {formatCents(person.amount, debtsCurrency, locale)}
-                  </span>
-                </div>
+                  userId={person.userId}
+                  name={person.userName}
+                  amount={person.amount}
+                  currency={debtsCurrency}
+                  locale={locale}
+                  tone="positive"
+                />
               ))}
             </div>
           </CardContent>
@@ -237,22 +200,15 @@ export default function DashboardPage() {
             )}
             <div className="divide-y divide-border/60">
               {overallDebts.data?.youOwe.map((person) => (
-                <div
+                <PersonRow
                   key={person.userId}
-                  className="flex items-center justify-between rounded-md px-1 py-2.5 transition-colors hover:bg-muted/50"
-                >
-                  <div className="flex items-center gap-3">
-                    <div
-                      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-medium text-white shadow-sm ${avatarColor(person.userId)}`}
-                    >
-                      {getInitials(person.userName)}
-                    </div>
-                    <span className="text-sm font-medium">{person.userName}</span>
-                  </div>
-                  <span className="text-sm font-semibold tabular-nums text-red-600 dark:text-red-400">
-                    {formatCents(person.amount, debtsCurrency, locale)}
-                  </span>
-                </div>
+                  userId={person.userId}
+                  name={person.userName}
+                  amount={person.amount}
+                  currency={debtsCurrency}
+                  locale={locale}
+                  tone="negative"
+                />
               ))}
             </div>
           </CardContent>
@@ -308,7 +264,7 @@ export default function DashboardPage() {
                       <div className="flex items-center gap-2">
                         <div className="flex -space-x-2">
                           {visibleMembers.map((member) => {
-                            const name = member.user.name ?? member.user.placeholderName ?? member.user.email ?? '?';
+                            const name = member.user.placeholderName ?? member.user.name ?? member.user.email ?? '?';
                             return member.user.image ? (
                               <Image
                                 key={member.user.id}

@@ -1,0 +1,88 @@
+{
+  "title": "Amigos",
+  "subtitle": "Todas las personas con las que compartes gastos, dentro o fuera de un grupo.",
+  "addFriend": "Añadir amigo",
+  "searchPlaceholder": "Buscar amigos",
+  "noFriends": "Aún no tienes amigos.",
+  "noFriendsDescription": "Añade a alguien con el correo con el que se registró, o añade un nombre para alguien que no usa ShareTab.",
+  "noSearchResults": "Ningún amigo coincide con la búsqueda.",
+  "settledUp": "Todo saldado",
+  "owesYou": "Te debe",
+  "youOwe": "Le debes",
+  "amountHidden": "Oculto",
+  "approximateRates": "Algunos importes usan tipos de cambio aproximados.",
+  "pendingTitle": "Invitaciones",
+  "allTitle": "Todos los amigos",
+  "status": {
+    "pendingIncoming": "Te ha invitado",
+    "pendingOutgoing": "Invitación enviada",
+    "rejected": "Rechazada",
+    "placeholder": "No usa ShareTab"
+  },
+  "sources": {
+    "group": "Grupo compartido",
+    "expense": "Gasto compartido"
+  },
+  "actions": {
+    "accept": "Aceptar",
+    "reject": "Rechazar",
+    "resend": "Reenviar"
+  },
+  "add": {
+    "title": "Añadir un amigo",
+    "description": "Invita a alguien con el correo con el que se registró, o añade un nombre para alguien que no usa ShareTab.",
+    "byEmail": "Por correo",
+    "byName": "Por nombre",
+    "emailLabel": "Correo electrónico",
+    "emailPlaceholder": "amigo@ejemplo.com",
+    "nameLabel": "Nombre",
+    "namePlaceholder": "Alex",
+    "nameHint": "No se notifica a nadie. Es un marcador con el que puedes dividir gastos y saldar cuentas, y luego se puede fusionar con una cuenta real.",
+    "submitEmail": "Enviar invitación",
+    "submitName": "Añadir amigo",
+    "submitting": "Guardando…"
+  },
+  "detail": {
+    "back": "Volver a amigos",
+    "notFound": "Esta persona no está en tu lista de amigos.",
+    "owesYou": "{name} te debe",
+    "youOwe": "Le debes a {name}",
+    "settled": "Estás en paz con {name}",
+    "hiddenOutgoing": "Los importes permanecen ocultos hasta que {name} acepte tu invitación.",
+    "hiddenIncoming": "Acepta la invitación para compartir saldos con {name}.",
+    "addExpense": "Añadir gasto",
+    "settleUp": "Saldar cuentas",
+    "ledgerTitle": "Historial compartido",
+    "noLedger": "Todavía no hay nada compartido.",
+    "truncated": "Mostrando las {count} entradas más recientes. El saldo de arriba sigue incluyéndolo todo.",
+    "direct": "Directo",
+    "youPaid": "Pagaste tú",
+    "friendPaid": "Pagó {name}",
+    "youSettled": "Le pagaste a {name}",
+    "friendSettled": "{name} te pagó",
+    "payment": "Pago"
+  },
+  "expense": {
+    "title": "Nuevo gasto compartido",
+    "subtitle": "Fuera de cualquier grupo. Solo afecta a tu saldo con las personas de abajo.",
+    "splitWith": "Dividir con",
+    "splitWithHint": "Puedes añadir a cualquiera cuyo saldo ya puedas ver.",
+    "you": "Tú",
+    "back": "Volver a {name}"
+  },
+  "settle": {
+    "title": "Saldar cuentas con {name}",
+    "description": "Registra un pago fuera de cualquier grupo. Los saldos de tus grupos compartidos no se ven afectados.",
+    "direction": "Pago",
+    "youPaid": "Le pagaste a {name}",
+    "friendPaid": "{name} te pagó",
+    "friendPaidHint": "Se registra en su nombre porque {name} no usa ShareTab.",
+    "theirPaymentHint": "{name} te debe. Solo esa persona puede registrar el pago que lo salda; este formulario registra uno que tú le hiciste.",
+    "amount": "Importe",
+    "note": "Nota",
+    "notePlaceholder": "Opcional",
+    "useSuggested": "Usar {amount}",
+    "submit": "Registrar pago",
+    "submitting": "Registrando…"
+  }
+}

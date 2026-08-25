@@ -4,10 +4,14 @@ import { createTRPCRouter, groupMemberProcedure, ledgerScopeProcedure, scopeGrou
 import { getExchangeRate, convertCents } from '../../lib/exchange-rates';
 import { MAX_MONEY_CENTS } from '@/lib/money';
 import { assertDirectParticipants } from '../../lib/friend-connections';
+import { mayRecordDirectPaymentFrom } from '../../lib/direct-participants';
 
-// Both scopes refuse this, for different reasons: inside a group only an owner
-// or admin may record someone else's payment, and outside one nobody may.
+// Two rules, so two messages: inside a group only an owner or admin may record
+// someone else's payment, while outside one the only stand-in for that authority
+// is a placeholder, who has no account to record their own with. A single shared
+// string would tell one of the two callers something untrue.
 const SELF_PAYMENTS_ONLY = 'You can only record payments from yourself';
+const DIRECT_PAYMENTS_ONLY = 'You can only record payments from yourself, or from someone who is not on ShareTab';
 
 export const settlementsRouter = createTRPCRouter({
   list: groupMemberProcedure
@@ -107,13 +111,20 @@ export const settlementsRouter = createTRPCRouter({
         }
       } else {
         // The group version lets an owner or admin record a payment on someone
-        // else's behalf. Outside a group nobody holds that authority, so a
-        // direct settlement can only ever be one the viewer made.
-        if (input.fromId && input.fromId !== ctx.user.id) {
-          throw new TRPCError({
-            code: 'FORBIDDEN',
-            message: SELF_PAYMENTS_ONLY,
+        // else's behalf. Outside a group the only stand-in for that authority
+        // is a placeholder, which cannot log in to record its own payments —
+        // see `mayRecordDirectPaymentFrom`.
+        if (effectiveFromId !== ctx.user.id) {
+          const payer = await ctx.db.user.findUnique({
+            where: { id: effectiveFromId },
+            select: { id: true, isPlaceholder: true },
           });
+          if (!payer || !mayRecordDirectPaymentFrom(ctx.user.id, payer)) {
+            throw new TRPCError({
+              code: 'FORBIDDEN',
+              message: DIRECT_PAYMENTS_ONLY,
+            });
+          }
         }
         await assertDirectParticipants(ctx.db, ctx.user.id, [effectiveFromId, input.toId]);
       }

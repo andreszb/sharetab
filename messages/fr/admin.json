@@ -160,7 +160,9 @@
     "typeGroupArchived": "Groupe archivé",
     "typeGroupUnarchived": "Groupe désarchivé",
     "typePlaceholderCreated": "Espace réservé ajouté",
-    "typeSettlementCreated": "Règlement"
+    "typeSettlementCreated": "Règlement",
+    "typeFriendInviteSent": "Invitation d'ami envoyée",
+    "typeFriendInviteAccepted": "Invitation d'ami acceptée"
   },
   "tools": {
     "title": "Outils d'administration",

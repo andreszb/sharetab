@@ -119,7 +119,8 @@ ShareTab is a free, self-hosted alternative to Splitwise for tracking shared exp
 - **Guest bill splitting** -- no account needed, shareable summary links
 - **Pluggable AI providers** -- OpenAI (GPT-4o), OpenAI-Codex (ChatGPT OAuth), Claude (API key), Meridian (Claude Max subscription), local Ollama
 - **Group archiving** -- archive inactive groups to declutter your dashboard; toggle archived view on groups page
-- **Cross-group dashboard** -- see all your balances at a glance, with per-person debt breakdown
+- **Friends** -- track IOUs with people outside any group: add by email or as a placeholder, log non-group expenses, see one balance per person rolled up across every shared group, and settle up outside a group
+- **Cross-group dashboard** -- see all your balances at a glance, with per-person debt breakdown converted to your own currency
 - **Debt simplification** -- minimize the number of payments needed
 - **Settle up** -- record payments between any two group members with explicit From/To fields
 - **Placeholder members** -- add people without accounts; rename or remove them from group settings

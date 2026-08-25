@@ -160,7 +160,9 @@
     "typeGroupArchived": "グループをアーカイブ",
     "typeGroupUnarchived": "グループのアーカイブを解除",
     "typePlaceholderCreated": "プレースホルダー追加",
-    "typeSettlementCreated": "精算"
+    "typeSettlementCreated": "精算",
+    "typeFriendInviteSent": "友だち招待を送信",
+    "typeFriendInviteAccepted": "友だち招待を承認"
   },
   "tools": {
     "title": "管理ツール",

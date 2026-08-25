@@ -1,0 +1,88 @@
+{
+  "title": "Vänner",
+  "subtitle": "Alla du delar utgifter med, i en grupp eller utanför.",
+  "addFriend": "Lägg till vän",
+  "searchPlaceholder": "Sök vänner",
+  "noFriends": "Inga vänner än.",
+  "noFriendsDescription": "Lägg till någon med e-postadressen de registrerade sig med, eller lägg till ett namn för någon som inte använder ShareTab.",
+  "noSearchResults": "Inga vänner matchar sökningen.",
+  "settledUp": "Allt är kvittat",
+  "owesYou": "Är skyldig dig",
+  "youOwe": "Du är skyldig",
+  "amountHidden": "Dolt",
+  "approximateRates": "Vissa belopp använder ungefärliga växelkurser.",
+  "pendingTitle": "Inbjudningar",
+  "allTitle": "Alla vänner",
+  "status": {
+    "pendingIncoming": "Bjöd in dig",
+    "pendingOutgoing": "Inbjudan skickad",
+    "rejected": "Avböjd",
+    "placeholder": "Inte på ShareTab"
+  },
+  "sources": {
+    "group": "Delad grupp",
+    "expense": "Delad utgift"
+  },
+  "actions": {
+    "accept": "Acceptera",
+    "reject": "Avböj",
+    "resend": "Skicka igen"
+  },
+  "add": {
+    "title": "Lägg till en vän",
+    "description": "Bjud in någon med e-postadressen de registrerade sig med, eller lägg till ett namn för någon som inte använder ShareTab.",
+    "byEmail": "Via e-post",
+    "byName": "Via namn",
+    "emailLabel": "E-post",
+    "emailPlaceholder": "van@exempel.se",
+    "nameLabel": "Namn",
+    "namePlaceholder": "Alex",
+    "nameHint": "Ingen meddelas. Det här är en platshållare du kan dela utgifter med och kvitta mot, och som senare kan slås ihop med ett riktigt konto.",
+    "submitEmail": "Skicka inbjudan",
+    "submitName": "Lägg till vän",
+    "submitting": "Sparar…"
+  },
+  "detail": {
+    "back": "Tillbaka till vänner",
+    "notFound": "Den här personen finns inte i din vänlista.",
+    "owesYou": "{name} är skyldig dig",
+    "youOwe": "Du är skyldig {name}",
+    "settled": "Du och {name} är kvitt",
+    "hiddenOutgoing": "Beloppen förblir dolda tills {name} accepterar din inbjudan.",
+    "hiddenIncoming": "Acceptera inbjudan för att dela saldon med {name}.",
+    "addExpense": "Lägg till utgift",
+    "settleUp": "Kvitta",
+    "ledgerTitle": "Delad historik",
+    "noLedger": "Inget delat än.",
+    "truncated": "Visar de {count} senaste posterna. Saldot ovan omfattar fortfarande allt.",
+    "direct": "Direkt",
+    "youPaid": "Du betalade",
+    "friendPaid": "{name} betalade",
+    "youSettled": "Du betalade {name}",
+    "friendSettled": "{name} betalade dig",
+    "payment": "Betalning"
+  },
+  "expense": {
+    "title": "Ny delad utgift",
+    "subtitle": "Utanför alla grupper. Detta påverkar bara ditt saldo med personerna nedan.",
+    "splitWith": "Dela med",
+    "splitWithHint": "Du kan lägga till alla vars saldo du redan kan se.",
+    "you": "Du",
+    "back": "Tillbaka till {name}"
+  },
+  "settle": {
+    "title": "Kvitta med {name}",
+    "description": "Registrerar en betalning utanför alla grupper. Saldon i era delade grupper påverkas inte.",
+    "direction": "Betalning",
+    "youPaid": "Du betalade {name}",
+    "friendPaid": "{name} betalade dig",
+    "friendPaidHint": "Registreras å deras vägnar eftersom {name} inte använder ShareTab.",
+    "theirPaymentHint": "{name} är skyldig dig. Bara de kan registrera betalningen som utjämnar det – här registrerar du en betalning du gjort till dem.",
+    "amount": "Belopp",
+    "note": "Anteckning",
+    "notePlaceholder": "Valfritt",
+    "useSuggested": "Använd {amount}",
+    "submit": "Registrera betalning",
+    "submitting": "Registrerar…"
+  }
+}

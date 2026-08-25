@@ -61,9 +61,12 @@ export const expensesRouter = createTRPCRouter({
         ...(input.cursor ? { cursor: { id: input.cursor } } : {}),
         orderBy: { expenseDate: 'desc' },
         include: {
-          paidBy: { select: { id: true, name: true, email: true, image: true } },
+          // `placeholderName` travels with every member label: a placeholder's
+          // `email` is the synthetic placeholder-<uuid>@placeholder.local address,
+          // which is what the UI falls back to showing without it.
+          paidBy: { select: { id: true, name: true, email: true, image: true, placeholderName: true } },
           shares: {
-            include: { user: { select: { id: true, name: true, email: true, image: true } } },
+            include: { user: { select: { id: true, name: true, email: true, image: true, placeholderName: true } } },
           },
         },
       });

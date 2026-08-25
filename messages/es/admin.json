@@ -160,7 +160,9 @@
     "typeGroupArchived": "Grupo archivado",
     "typeGroupUnarchived": "Grupo desarchivado",
     "typePlaceholderCreated": "Marcador añadido",
-    "typeSettlementCreated": "Liquidación"
+    "typeSettlementCreated": "Liquidación",
+    "typeFriendInviteSent": "Invitación de amistad enviada",
+    "typeFriendInviteAccepted": "Invitación de amistad aceptada"
   },
   "tools": {
     "title": "Herramientas de administración",

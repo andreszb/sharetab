@@ -160,7 +160,9 @@
     "typeGroupArchived": "Gruppe archiviert",
     "typeGroupUnarchived": "Gruppe dearchiviert",
     "typePlaceholderCreated": "Platzhalter hinzugefügt",
-    "typeSettlementCreated": "Abrechnung"
+    "typeSettlementCreated": "Abrechnung",
+    "typeFriendInviteSent": "Freundschaftsanfrage gesendet",
+    "typeFriendInviteAccepted": "Freundschaftsanfrage angenommen"
   },
   "tools": {
     "title": "Admin-Werkzeuge",

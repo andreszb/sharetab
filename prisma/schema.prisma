@@ -364,6 +364,8 @@ enum ActivityType {
   PLACEHOLDER_MERGED
   GROUP_ARCHIVED
   GROUP_UNARCHIVED
+  FRIEND_INVITE_SENT
+  FRIEND_INVITE_ACCEPTED
 }
 
 // ─── ADMIN ─────────────────────────────────────────────────
