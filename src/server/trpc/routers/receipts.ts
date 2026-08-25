@@ -2,7 +2,8 @@ import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import { Prisma } from '@/generated/prisma/client';
 import type { PrismaClient } from '@/generated/prisma/client';
-import { createTRPCRouter, protectedProcedure, groupMemberProcedure } from '../init';
+import { createTRPCRouter, protectedProcedure, ledgerScopeProcedure } from '../init';
+import { assertDirectConnections, assertDirectParticipants } from '../../lib/friend-connections';
 import { processReceiptImage } from '../../lib/receipt-processor';
 import { logger } from '../../lib/logger';
 import { parseExtractedData } from '../../lib/json-schemas';
@@ -402,10 +403,9 @@ export const receiptsRouter = createTRPCRouter({
     }
   }),
 
-  assignItemsAndCreateExpense: groupMemberProcedure
+  assignItemsAndCreateExpense: ledgerScopeProcedure
     .input(
       z.object({
-        groupId: z.string(),
         receiptId: z.string(),
         title: z.string().min(1).max(200),
         paidById: z.string(),
@@ -419,9 +419,10 @@ export const receiptsRouter = createTRPCRouter({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      // Verify group is not archived
-      const group = await ctx.db.group.findUnique({ where: { id: input.groupId } });
-      if (group?.archivedAt) {
+      const scope = ctx.scope;
+      const groupId = scope.kind === 'group' ? scope.groupId : null;
+
+      if (scope.kind === 'group' && scope.group.archivedAt) {
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'Cannot create expenses in archived groups' });
       }
 
@@ -435,8 +436,9 @@ export const receiptsRouter = createTRPCRouter({
 
       // Verify the caller has access to this receipt
       if (receipt.groupId) {
-        // If already assigned to a group, it must match the target group
-        if (receipt.groupId !== input.groupId) {
+        // If already assigned to a group, it must match the target group — and a
+        // direct expense has no group, so a grouped receipt cannot feed one.
+        if (receipt.groupId !== groupId) {
           throw new TRPCError({ code: 'FORBIDDEN', message: 'Receipt belongs to a different group' });
         }
       } else {
@@ -451,21 +453,25 @@ export const receiptsRouter = createTRPCRouter({
       const tax = extractedData.tax;
       const tip = input.tipOverride ?? extractedData.tip;
 
-      // Verify paidBy and all assignees are members of this group
-      const groupMembers = await ctx.db.groupMember.findMany({
-        where: { groupId: input.groupId },
-        select: { userId: true },
-      });
-      const memberIds = new Set(groupMembers.map((m) => m.userId));
-      if (!memberIds.has(input.paidById)) {
-        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Payer is not a member of this group' });
-      }
-      for (const a of input.assignments) {
-        for (const uid of a.userIds) {
+      const assignedUserIds = input.assignments.flatMap((a) => a.userIds);
+
+      if (scope.kind === 'group') {
+        // Verify paidBy and all assignees are members of this group
+        const groupMembers = await ctx.db.groupMember.findMany({
+          where: { groupId: scope.groupId },
+          select: { userId: true },
+        });
+        const memberIds = new Set(groupMembers.map((m) => m.userId));
+        if (!memberIds.has(input.paidById)) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Payer is not a member of this group' });
+        }
+        for (const uid of assignedUserIds) {
           if (!memberIds.has(uid)) {
             throw new TRPCError({ code: 'BAD_REQUEST', message: 'Assignee is not a member of this group' });
           }
         }
+      } else {
+        await assertDirectParticipants(ctx.db, ctx.user.id, [input.paidById, ...assignedUserIds]);
       }
 
       // Build item map and verify all referenced items belong to this receipt
@@ -531,31 +537,43 @@ export const receiptsRouter = createTRPCRouter({
         })),
       );
 
-      // Currency conversion for receipt expenses
+      // Currency conversion for receipt expenses. A direct expense has no group
+      // currency to anchor to, so it keeps the receipt's own currency (falling
+      // back to the viewer's default) and leaves baseCurrencyAmount null.
       const rawCurrency = extractedData.currency;
       const isValidIso = rawCurrency && /^[a-zA-Z]{3}$/.test(rawCurrency);
-      const receiptCurrency = (isValidIso ? rawCurrency : group!.currency).toUpperCase();
-      const groupCurrency = group!.currency.toUpperCase();
       let exchangeRate: number | null = null;
       let baseCurrencyAmount: number | null = null;
+      let receiptCurrency: string;
 
-      if (receiptCurrency !== groupCurrency) {
-        const receiptDate = extractedData.date?.slice(0, 10);
-        exchangeRate = await getExchangeRate(receiptCurrency, groupCurrency, receiptDate);
-        if (exchangeRate === null) {
-          throw new TRPCError({
-            code: 'BAD_REQUEST',
-            message: 'Could not fetch exchange rate for receipt currency. Please try again.',
-          });
+      if (scope.kind === 'group') {
+        const groupCurrency = scope.group.currency.toUpperCase();
+        receiptCurrency = (isValidIso ? rawCurrency : scope.group.currency).toUpperCase();
+
+        if (receiptCurrency !== groupCurrency) {
+          const receiptDate = extractedData.date?.slice(0, 10);
+          exchangeRate = await getExchangeRate(receiptCurrency, groupCurrency, receiptDate);
+          if (exchangeRate === null) {
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message: 'Could not fetch exchange rate for receipt currency. Please try again.',
+            });
+          }
+          baseCurrencyAmount = convertCents(totalAmount, exchangeRate);
         }
-        baseCurrencyAmount = convertCents(totalAmount, exchangeRate);
+      } else {
+        const viewer = await ctx.db.user.findUnique({
+          where: { id: ctx.user.id },
+          select: { defaultCurrency: true },
+        });
+        receiptCurrency = (isValidIso ? rawCurrency : (viewer?.defaultCurrency ?? 'USD')).toUpperCase();
       }
 
       // All writes in a single transaction for atomicity
       const expense = await ctx.db.$transaction(async (tx) => {
         const exp = await tx.expense.create({
           data: {
-            groupId: input.groupId,
+            groupId,
             title: input.title,
             amount: totalAmount,
             currency: receiptCurrency,
@@ -585,7 +603,7 @@ export const receiptsRouter = createTRPCRouter({
 
         await tx.activityLog.create({
           data: {
-            groupId: input.groupId,
+            groupId,
             userId: ctx.user.id,
             type: 'EXPENSE_CREATED',
             entityId: exp.id,
@@ -599,10 +617,9 @@ export const receiptsRouter = createTRPCRouter({
       return expense;
     }),
 
-  saveForLater: groupMemberProcedure
+  saveForLater: ledgerScopeProcedure
     .input(
       z.object({
-        groupId: z.string(),
         receiptId: z.string(),
         paidById: z.string().nullable().optional(),
         assignments: z
@@ -618,6 +635,7 @@ export const receiptsRouter = createTRPCRouter({
     )
     .mutation(async ({ ctx, input }) => {
       await verifyReceiptAccess(ctx.db, input.receiptId, ctx.user.id);
+      const scope = ctx.scope;
 
       await ctx.db.$transaction(async (tx) => {
         const receipt = await tx.receipt.findUnique({
@@ -625,6 +643,11 @@ export const receiptsRouter = createTRPCRouter({
         });
         if (!receipt || receipt.status !== 'COMPLETED') {
           throw new TRPCError({ code: 'BAD_REQUEST', message: 'Receipt must be processed first' });
+        }
+        // Saving with no group would otherwise detach a receipt that already
+        // belongs to one, taking it out of that group for every member.
+        if (scope.kind === 'direct' && receipt.groupId) {
+          throw new TRPCError({ code: 'FORBIDDEN', message: 'Receipt belongs to a group' });
         }
         // Check it's not already linked to an expense
         const existing = await tx.expense.findUnique({
@@ -645,28 +668,34 @@ export const receiptsRouter = createTRPCRouter({
         }
 
         if (userIdsToValidate.size > 0) {
-          const validMembers = await tx.groupMember.findMany({
-            where: {
-              groupId: input.groupId,
-              userId: { in: Array.from(userIdsToValidate) },
-            },
-            select: { userId: true },
-          });
-          const validMemberIds = new Set(validMembers.map((member) => member.userId));
-          for (const userId of userIdsToValidate) {
-            if (!validMemberIds.has(userId)) {
-              throw new TRPCError({
-                code: 'BAD_REQUEST',
-                message: `User ${userId} is not a member of this group`,
-              });
+          if (scope.kind === 'group') {
+            const validMembers = await tx.groupMember.findMany({
+              where: {
+                groupId: scope.groupId,
+                userId: { in: Array.from(userIdsToValidate) },
+              },
+              select: { userId: true },
+            });
+            const validMemberIds = new Set(validMembers.map((member) => member.userId));
+            for (const userId of userIdsToValidate) {
+              if (!validMemberIds.has(userId)) {
+                throw new TRPCError({
+                  code: 'BAD_REQUEST',
+                  message: `User ${userId} is not a member of this group`,
+                });
+              }
             }
+          } else {
+            // Connection only: a half-assigned receipt need not name the viewer
+            // yet. assignItemsAndCreateExpense applies the full rule.
+            await assertDirectConnections(ctx.db, ctx.user.id, Array.from(userIdsToValidate));
           }
         }
 
         await tx.receipt.update({
           where: { id: input.receiptId },
           data: {
-            groupId: input.groupId,
+            groupId: scope.kind === 'group' ? scope.groupId : null,
             savedById: ctx.user.id,
             ...(input.paidById !== undefined ? { paidById: input.paidById } : {}),
           },
@@ -723,10 +752,12 @@ export const receiptsRouter = createTRPCRouter({
       return { success: true };
     }),
 
-  listPending: groupMemberProcedure.input(z.object({ groupId: z.string() })).query(async ({ ctx, input }) => {
+  listPending: ledgerScopeProcedure.query(async ({ ctx }) => {
     const receipts = await ctx.db.receipt.findMany({
       where: {
-        groupId: input.groupId,
+        // Outside a group a pending receipt belongs to whoever uploaded it —
+        // there is no membership to widen access to it.
+        ...(ctx.scope.kind === 'group' ? { groupId: ctx.scope.groupId } : { groupId: null, uploadedById: ctx.user.id }),
         status: 'COMPLETED',
         expense: null,
       },

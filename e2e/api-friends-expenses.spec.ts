@@ -1,0 +1,270 @@
+import { test, expect, request } from '@playwright/test';
+import { users, authedContext, trpcMutation, trpcQuery, trpcError, uniqueEmail, deleteTestUser } from './helpers';
+
+const BASE = process.env.BASE_URL || 'http://localhost:3001';
+const PASSWORD = 'password123';
+
+/**
+ * Read a tRPC payload from either shape: a batched query replies under
+ * `body[0].result`, a mutation under `body.result`. `trpcResult` in helpers.ts
+ * only handles the first, and this spec calls both kinds throughout.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function result(res: { json: () => Promise<any> }): Promise<any> {
+  const body = await res.json();
+  return body?.result?.data?.json ?? body?.[0]?.result?.data?.json;
+}
+
+/**
+ * Register a throwaway account through the API and sign in as it.
+ *
+ * These specs deliberately use fresh users rather than the seeded ones: a
+ * direct settlement cannot be deleted through any procedure, so running them
+ * against Alice and Bob would permanently move the balances that
+ * `api-balances.spec.ts` asserts. Everything created here is removed by
+ * deleting the users in `afterAll`.
+ */
+async function registerUser(name: string, email: string) {
+  const anon = await request.newContext({ baseURL: BASE });
+  await trpcMutation(anon, 'auth.register', { name, email, password: PASSWORD });
+  await anon.dispose();
+  return authedContext(email, PASSWORD);
+}
+
+test.describe('Friends direct expenses API', () => {
+  const emails = {
+    ana: uniqueEmail('friend-ana'),
+    ben: uniqueEmail('friend-ben'),
+    cleo: uniqueEmail('friend-cleo'),
+    dana: uniqueEmail('friend-dana'),
+  };
+
+  let ana: Awaited<ReturnType<typeof authedContext>>;
+  let ben: Awaited<ReturnType<typeof authedContext>>;
+  let cleo: Awaited<ReturnType<typeof authedContext>>;
+  let dana: Awaited<ReturnType<typeof authedContext>>;
+  let anaId: string;
+  let benId: string;
+  let cleoId: string;
+  let danaId: string;
+
+  test.beforeAll(async () => {
+    ana = await registerUser('Ana Direct', emails.ana);
+    ben = await registerUser('Ben Direct', emails.ben);
+    cleo = await registerUser('Cleo Direct', emails.cleo);
+    dana = await registerUser('Dana Direct', emails.dana);
+
+    // getProfile omits the id; the session carries it.
+    anaId = (await result(await trpcQuery(ana, 'auth.getSession'))).user.id;
+    benId = (await result(await trpcQuery(ben, 'auth.getSession'))).user.id;
+    cleoId = (await result(await trpcQuery(cleo, 'auth.getSession'))).user.id;
+    danaId = (await result(await trpcQuery(dana, 'auth.getSession'))).user.id;
+
+    // Ana invites Ben and Dana. She may log expenses against either straight
+    // away — the friendship is one-sided until they answer. Dana is never put
+    // on an expense, so she stays a stranger to everyone for the negatives.
+    await trpcMutation(ana, 'friends.addByEmail', { email: emails.ben });
+    await trpcMutation(ana, 'friends.addByEmail', { email: emails.dana });
+  });
+
+  test.afterAll(async () => {
+    for (const ctx of [ana, ben, cleo, dana]) await ctx.dispose();
+    const admin = await authedContext(users.alice.email, users.alice.password);
+    for (const email of Object.values(emails)) await deleteTestUser(admin, email);
+    await admin.dispose();
+  });
+
+  test('creates a direct expense and reflects it in the friend balance', async () => {
+    const res = await trpcMutation(ana, 'expenses.create', {
+      title: 'Dinner, no group',
+      amount: 4000,
+      currency: 'USD',
+      paidById: anaId,
+      splitMode: 'EQUAL',
+      shares: [
+        { userId: anaId, amount: 2000 },
+        { userId: benId, amount: 2000 },
+      ],
+    });
+    const expense = await result(res);
+    expect(expense?.id).toBeTruthy();
+    expect(expense.groupId).toBeNull();
+    // The anchor-currency contract: a direct row carries no base amount.
+    expect(expense.baseCurrencyAmount).toBeNull();
+
+    const balance = await result(await trpcQuery(ana, 'friends.getBalance', { friendId: benId }));
+    expect(balance.net).toBe(2000);
+
+    const ledger = await result(await trpcQuery(ana, 'friends.getLedger', { friendId: benId }));
+    expect(ledger.net).toBe(2000);
+    expect(ledger.entries.reduce((sum: number, e: { delta: number }) => sum + e.delta, 0)).toBe(2000);
+    expect(ledger.entries[0].groupId).toBeNull();
+  });
+
+  test('settling the direct balance brings it back to zero', async () => {
+    const res = await trpcMutation(ben, 'settlements.create', {
+      toId: anaId,
+      amount: 2000,
+      currency: 'USD',
+      note: 'Paying Ana back',
+    });
+    const settlement = await result(res);
+    expect(settlement?.id).toBeTruthy();
+    expect(settlement.groupId).toBeNull();
+    expect(settlement.baseCurrencyAmount).toBeNull();
+
+    const balance = await result(await trpcQuery(ana, 'friends.getBalance', { friendId: benId }));
+    expect(balance.net).toBe(0);
+  });
+
+  test('a direct expense reaches the other participant activity feed', async () => {
+    const items = await result(await trpcQuery(ben, 'activity.getRecentActivity', { limit: 20 }));
+    const titles = items.map((item: { metadata?: { title?: string } }) => item.metadata?.title);
+    expect(titles).toContain('Dinner, no group');
+  });
+
+  test('a three-way direct expense is allowed once everyone is connected', async () => {
+    await trpcMutation(ana, 'friends.addByEmail', { email: emails.cleo });
+
+    const res = await trpcMutation(ana, 'expenses.create', {
+      title: 'Three-way taxi',
+      amount: 3000,
+      currency: 'USD',
+      paidById: anaId,
+      splitMode: 'EQUAL',
+      shares: [
+        { userId: anaId, amount: 1000 },
+        { userId: benId, amount: 1000 },
+        { userId: cleoId, amount: 1000 },
+      ],
+    });
+    expect((await result(res))?.id).toBeTruthy();
+
+    const balance = await result(await trpcQuery(ana, 'friends.getBalance', { friendId: cleoId }));
+    expect(balance.net).toBe(1000);
+  });
+
+  test('sharing a direct expense connects two people who never invited each other', async () => {
+    // Ben and Cleo were only ever both on Ana's three-way taxi. That shared row
+    // is itself a connection, so either can now start an expense with the other
+    // — the same rule that makes group co-members friends without a row.
+    const res = await trpcMutation(ben, 'expenses.create', {
+      title: 'Ben and Cleo, introduced by a taxi',
+      amount: 2000,
+      paidById: benId,
+      splitMode: 'EQUAL',
+      shares: [
+        { userId: benId, amount: 1000 },
+        { userId: cleoId, amount: 1000 },
+      ],
+    });
+    expect((await result(res))?.id).toBeTruthy();
+  });
+
+  test('an unconnected participant is refused', async () => {
+    // Dana shares no group, no expense, and no friendship with Ben.
+    const res = await trpcMutation(ben, 'expenses.create', {
+      title: 'Stranger split',
+      amount: 2000,
+      paidById: benId,
+      splitMode: 'EQUAL',
+      shares: [
+        { userId: benId, amount: 1000 },
+        { userId: danaId, amount: 1000 },
+      ],
+    });
+    const error = await trpcError(res);
+    expect(error?.data?.code).toBe('BAD_REQUEST');
+    expect(error?.message).toContain('not connected');
+  });
+
+  test('an expense the creator is not part of is refused', async () => {
+    const res = await trpcMutation(ana, 'expenses.create', {
+      title: 'Not my expense',
+      amount: 2000,
+      paidById: benId,
+      splitMode: 'EQUAL',
+      shares: [{ userId: benId, amount: 2000 }],
+    });
+    const error = await trpcError(res);
+    expect(error?.data?.code).toBe('BAD_REQUEST');
+    expect(error?.message).toContain('must be part of');
+  });
+
+  test('someone who only received an invite cannot log against the sender', async () => {
+    // Dana has an unanswered invite from Ana and no shared history, so the
+    // one-sided rule is the only thing deciding — and it says no.
+    const res = await trpcMutation(dana, 'expenses.create', {
+      title: 'Presumptuous',
+      amount: 2000,
+      paidById: danaId,
+      splitMode: 'EQUAL',
+      shares: [
+        { userId: danaId, amount: 1000 },
+        { userId: anaId, amount: 1000 },
+      ],
+    });
+    const error = await trpcError(res);
+    expect(error?.data?.code).toBe('BAD_REQUEST');
+    expect(error?.message).toContain('not connected');
+  });
+
+  test('accepting the invite makes it work', async () => {
+    await trpcMutation(dana, 'friends.respondToInvite', { friendId: anaId, response: 'accept' });
+
+    const res = await trpcMutation(dana, 'expenses.create', {
+      title: 'Now allowed',
+      amount: 2000,
+      paidById: danaId,
+      splitMode: 'EQUAL',
+      shares: [
+        { userId: danaId, amount: 1000 },
+        { userId: anaId, amount: 1000 },
+      ],
+    });
+    expect((await result(res))?.id).toBeTruthy();
+  });
+
+  test('a non-participant cannot read a direct expense', async () => {
+    const created = await result(
+      await trpcMutation(ana, 'expenses.create', {
+        title: 'Private to Ana and Ben',
+        amount: 1000,
+        paidById: anaId,
+        splitMode: 'EQUAL',
+        shares: [
+          { userId: anaId, amount: 500 },
+          { userId: benId, amount: 500 },
+        ],
+      }),
+    );
+
+    const mine = await result(await trpcQuery(ana, 'expenses.get', { expenseId: created.id }));
+    expect(mine.id).toBe(created.id);
+
+    const res = await trpcQuery(dana, 'expenses.get', { expenseId: created.id });
+    expect((await trpcError(res))?.data?.code).toBe('NOT_FOUND');
+  });
+
+  test('only the creator or payer can delete a direct expense', async () => {
+    const created = await result(
+      await trpcMutation(ana, 'expenses.create', {
+        title: 'Ana deletes this',
+        amount: 1000,
+        paidById: anaId,
+        splitMode: 'EQUAL',
+        shares: [
+          { userId: anaId, amount: 500 },
+          { userId: benId, amount: 500 },
+        ],
+      }),
+    );
+
+    // Ben holds a share but neither paid nor created it.
+    const refused = await trpcMutation(ben, 'expenses.delete', { expenseId: created.id });
+    expect((await trpcError(refused))?.data?.code).toBe('FORBIDDEN');
+
+    const deleted = await trpcMutation(ana, 'expenses.delete', { expenseId: created.id });
+    expect((await result(deleted))?.success).toBe(true);
+  });
+});

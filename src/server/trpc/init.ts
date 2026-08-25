@@ -3,6 +3,7 @@ import superjson from 'superjson';
 import { z } from 'zod';
 import { cookies } from 'next/headers';
 import { auth } from '../auth';
+import type { GroupMember } from '@/generated/prisma/client';
 import { db } from '../db';
 import { logger } from '../lib/logger';
 import { verifyAndParse } from '../lib/signed-cookie';
@@ -190,4 +191,57 @@ export const friendProcedure = protectedProcedure
         canViewAmounts: canViewAmountsFor(ctx.user.id, friendships, sharesHistory),
       },
     });
+  });
+
+/**
+ * The scope a ledger row is written into.
+ *
+ * Expenses, settlements and receipt-derived expenses all land either inside a
+ * group or in the direct space between friends, and the two differ in more
+ * than a nullable column: a group brings membership, roles, an archived flag
+ * and a base currency, while the direct space brings none of them.
+ */
+export type LedgerScope =
+  | { kind: 'direct' }
+  | {
+      kind: 'group';
+      groupId: string;
+      membership: GroupMember;
+      group: { archivedAt: Date | null; currency: string };
+    };
+
+/**
+ * `groupMemberProcedure` for procedures that can also run outside a group.
+ *
+ * `groupId` becomes optional, and the resolved `ctx.scope` is a discriminated
+ * union rather than a bare membership, so a call site cannot read
+ * `membership.role` without first establishing that there is a group to have a
+ * role in. Passing a `groupId` you are not a member of is still a 403.
+ *
+ * The group's `archivedAt` and `currency` are fetched alongside the membership
+ * because every call site needed them and each was issuing its own
+ * `group.findUnique` to get them. The archived *throw* stays at the call sites:
+ * "cannot add to" and "cannot delete from" are different messages, and on a
+ * direct scope there is no `archivedAt` for the check to read at all.
+ */
+export const ledgerScopeProcedure = protectedProcedure
+  .input(z.object({ groupId: z.string().nullish() }))
+  .use(async ({ ctx, input, next }) => {
+    let scope: LedgerScope;
+
+    if (input.groupId) {
+      const membership = await ctx.db.groupMember.findUnique({
+        where: { userId_groupId: { userId: ctx.user.id, groupId: input.groupId } },
+        include: { group: { select: { archivedAt: true, currency: true } } },
+      });
+      if (!membership) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Not a member of this group' });
+      }
+      const { group, ...rest } = membership;
+      scope = { kind: 'group', groupId: input.groupId, membership: rest, group };
+    } else {
+      scope = { kind: 'direct' };
+    }
+
+    return next({ ctx: { ...ctx, scope } });
   });
